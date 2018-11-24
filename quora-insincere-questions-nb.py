@@ -10,13 +10,13 @@ import traceback
 from gensim.models import KeyedVectors
 from keras.engine import Layer
 from keras.layers import Bidirectional, CuDNNLSTM, initializers, regularizers, constraints
-from keras.layers import Dense, Input, Embedding, Dropout
+from keras.layers import Dense, Input, Embedding as EmbeddingLayer, Dropout
 from keras.models import Model
 from keras.preprocessing.sequence import pad_sequences
 from keras.preprocessing.text import Tokenizer
 from nltk.corpus import stopwords
 from sklearn import metrics
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, StratifiedKFold
 
 
 class Data:
@@ -177,19 +177,16 @@ class Attention(Layer):
         return input_shape[0], self.features_dim
 
 
-class RNNModel:
-    def __init__(self, data, name=None):
-        self.data = data
-        self.name = name
+class Embedding:
+    def __init__(self, data):
+        self.embeddings_index = None
+        self.nb_words = None
         self.embeddings_index = None
         self.embed_size = None
         self.embedding_matrix = None
-        self.embedding_vector = None
-        self.nb_words = None
-        self.model = None
-        self.history = None
+        self.data = data
 
-    def load_embedding(self, embedding_file='../input/embeddings/glove.840B.300d/glove.840B.300d.txt'):
+    def load(self, embedding_file='../input/embeddings/glove.840B.300d/glove.840B.300d.txt'):
         logging.info("loading embedding : " + embedding_file)
 
         def get_coefs(word, *arr):
@@ -218,9 +215,13 @@ class RNNModel:
             logging.error(e)
             tb = traceback.format_exc()
             logging.error(tb)
-            logging.info("len(self.embeddings_index.values()): " + str(len(self.embeddings_index.values())))
-            logging.info("type(self.embeddings_index.values()[0]): " + str(type(list(self.embeddings_index.values())[0])))
-            logging.info("first few self.embeddings_index.values(): " + str(list(self.embeddings_index.values())[:5]))
+            logging.debug("len(self.embeddings_index.values()): "
+                          + str(len(self.embeddings_index.values())))
+            logging.debug("type(self.embeddings_index.values()[0]): "
+                          + str(type(list(self.embeddings_index.values())[0])))
+            logging.debug("first few self.embeddings_index.values(): "
+                          + str(list(self.embeddings_index.values())[:5]))
+            raise
         emb_mean, emb_std = all_embs.mean(), all_embs.std()
         self.embed_size = all_embs.shape[1]
 
@@ -228,20 +229,41 @@ class RNNModel:
         self.nb_words = min(self.data.max_feature, len(word_index))
         self.embedding_matrix = np.random.normal(emb_mean, emb_std, (self.nb_words, self.embed_size))
         for word, i in word_index.items():
-            if i >= self.data.max_feature:
+            if i >= self.nb_words:
                 continue
             embedding_vector = self.embeddings_index.get(word)
-            if self.embedding_vector is not None:
+            if embedding_vector is not None:
                 self.embedding_matrix[i] = embedding_vector
         return self.embedding_matrix
 
-    def blend_embeddings(self, embedding_files):
+
+class RNNModel:
+    def __init__(self, data, name=None):
+        self.data = data
+        self.name = name
+        self.embedding = None
+        self.model = None
+        self.history = None
+
+    def load_embedding(self, embedding_file='../input/embeddings/glove.840B.300d/glove.840B.300d.txt'):
+        self.embedding = Embedding(self.data)
+        self.embedding.load(embedding_file)
+
+    def set_embedding(self, embedding):
+        if type(embedding) is str:
+            self.load_embedding(embedding)
+        else:
+            self.embedding = embedding
+
+    def blend_embeddings(self, embeddings):
         """Average embedding matrix given list of embedding files."""
+        if self.embedding is None:
+            self.set_embedding(embeddings[0])
         embedding_matrices = list()
-        for emb in embedding_files:
-            embedding_matrices.append(self.load_embedding(emb))
+        for emb in embeddings:
+            embedding_matrices.append(emb.embedding_matrix)
         blend = np.mean(embedding_matrices, axis=0)
-        self.embedding_matrix = blend
+        self.embedding.embedding_matrix = blend
         return blend
 
     @staticmethod
@@ -261,7 +283,10 @@ class RNNModel:
 
     def define_model(self):
         inp = Input(shape=(self.data.maxlen,))
-        x = Embedding(self.nb_words, self.embed_size, weights=[self.embedding_matrix], trainable=False)(inp)
+        x = EmbeddingLayer(self.embedding.nb_words,
+                           self.embedding.embed_size,
+                           weights=[self.embedding.embedding_matrix],
+                           trainable=False)(inp)
         x = Bidirectional(CuDNNLSTM(64, return_sequences=True))(x)
         x = Attention(self.data.maxlen)(x)
         x = Dense(16, activation="relu")(x)
@@ -274,19 +299,41 @@ class RNNModel:
     def print(self):
         print(self.model.summary())
 
-    def fit(self, pseudo_labels=False, batch_size=512, epochs=4, save_curve=True):
+    def fit(self,
+            train_indices=None,
+            val_indices=None,
+            pseudo_labels=False,
+            batch_size=512,
+            epochs=4,
+            save_curve=True,
+            curve_file_suffix=None):
         logging.info("Fitting model...")
         if pseudo_labels:
             train_x, train_y = self.data.full_X, self.data.full_y
+            val_x, val_y = self.data.val_X, self.data.val_y
         else:
-            train_x, train_y = self.data.train_X, self.data.train_y
+            if train_indices is not None:
+                train_x = self.data.train_X[train_indices]
+                train_y = self.data.train_y[train_indices]
+            else:
+                train_x = self.data.train_X
+                train_y = self.data.train_y
+            if val_indices is not None:
+                val_x = self.data.train_X[val_indices]
+                val_y = self.data.train_y[val_indices]
+            else:
+                val_x = self.data.val_X
+                val_y = self.data.val_y
         self.history = self.model.fit(train_x, train_y,
                                       batch_size=batch_size,
                                       epochs=epochs,
-                                      validation_data=(self.data.val_X, self.data.val_y))
+                                      validation_data=(val_x, val_y))
         if save_curve:
             filename = 'training_curve'
-            if self.name: filename += '_' + self.name
+            if self.name:
+                filename += '_' + self.name
+            if curve_file_suffix:
+                filename += '_' + curve_file_suffix
             filename += '.png'
             self.print_curve(filename)
 
@@ -298,6 +345,7 @@ class RNNModel:
         plt.xlabel('epoch')
         plt.legend(['train', 'val'], loc='upper left')
         plt.savefig(filename)
+        plt.close()
 
     def predict(self, x, batch_size=1024):
         logging.info("Predicting ...")
@@ -306,7 +354,7 @@ class RNNModel:
 
     def cleanup(self):
         logging.info("Releasing memory...")
-        del self.embeddings_index, self.embedding_matrix
+        del self.embedding.embeddings_index, self.embedding.embedding_matrix
         gc.collect()
         time.sleep(10)
 
@@ -315,21 +363,18 @@ class Ensemble:
     def __init__(self, models):
         self.models = models
 
-    def predict(self, X):
-        logging.info("Predicting with ensemble, size=" + str(len(self.models)))
+    def predict_average(self, X):
+        logging.info("Predicting with ensemble average, size=" + str(len(self.models)))
         predictions = list()
         for m in self.models:
             predictions.append(m.predict(X))
             logging.debug(type(predictions[-1]))
-        logging.debug(type(predictions), type(predictions[0]))
-        logging.debug(len(predictions), predictions[0].shape)
-        logging.debug([p.shape for p in predictions if p is not None])
-        logging.debug(["None: " + str(i) for i, p in enumerate(predictions) if p is None])
         avg_pred = np.mean(predictions, axis=0)
         return avg_pred
 
 
 def find_best_threshold(preds, y):
+    # TODO: Use an actual optimizer here rather than grid search.
     logging.info("Finding the best threshold...")
     best_thresh = -100
     best_score = -100
@@ -337,6 +382,7 @@ def find_best_threshold(preds, y):
         thresh = np.round(thresh, 2)
         score = metrics.f1_score(y, (preds > thresh).astype(int))
         if score > best_score:
+            best_score = score
             best_thresh = thresh
         logging.info("F1 score at threshold {0} is {1}".format(thresh, score))
     return best_thresh
@@ -380,7 +426,7 @@ def get_wrongest(X, y_true, y_pred, num_wrongest=5):
     return df[df['y_true'] == 0].head(num_wrongest), df[df['y_true'] == 1].tail(num_wrongest)
 
 
-def print_wrongest(X, y_true, y_pred, num_wrongest=100, print=False, persist=True):
+def print_wrongest(X, y_true, y_pred, num_wrongest=100, print_them=False, persist=True, file_suffix=None):
     def print_row(row):
         print("Q:" + row['question_text'])
         print("qid: " + row['qid'])
@@ -389,7 +435,7 @@ def print_wrongest(X, y_true, y_pred, num_wrongest=100, print=False, persist=Tru
         print("-"*40)
 
     wrongest_fps, wrongest_fns = get_wrongest(X, y_true, y_pred, num_wrongest=num_wrongest)
-    if print:
+    if print_them:
         print("Wrongest {} false positives:".format(num_wrongest))
         print("-" * 40)
         for i, row in wrongest_fps.iterrows():
@@ -400,35 +446,64 @@ def print_wrongest(X, y_true, y_pred, num_wrongest=100, print=False, persist=Tru
         for i, row in wrongest_fns.iterrows():
             print_row(row)
     if persist:
-        wrongest_fps.to_csv("wrongest_fps.csv", index=False)
-        wrongest_fns.to_csv("wrongest_fns.csv", index=False)
+        filename = 'wrongest'
+        if file_suffix:
+            filename += '_' + file_suffix
+        wrongest_fps.to_csv(filename + '_fps.csv', index=False)
+        wrongest_fns.to_csv(filename + '_fns.csv', index=False)
     return wrongest_fps, wrongest_fns
 
 
+def cross_validate(model_class, data, embeddings, n_splits=3, show_wrongest=True):
+    logging.info("Cross validating model {} using {} folds...".format(model_class.__name__, str(n_splits)))
+    skf = StratifiedKFold(n_splits=n_splits, shuffle=True)
+    models = list()
+    for i, (train, test) in enumerate(skf.split(data.train_X, data.train_y)):
+        logging.info("Running Fold {} of {}".format(i + 1, n_splits))
+        models.append(None)
+        models[-1] = model_class(data)
+        # TODO: Make embeddings reusable across models
+        models[-1].blend_embeddings(embeddings)
+        models[-1].define_model()
+        models[-1].fit(train_indices=train, val_indices=test, curve_file_suffix=str(i))
+        pred_y_val = models[-1].predict(data.train_X[test])
+        print_diagnostics(data.train_y[test], pred_y_val)
+        if show_wrongest:
+            print_wrongest(data.train_df.iloc[test],
+                           data.train_y[test],
+                           pred_y_val,
+                           num_wrongest=20,
+                           persist=True,
+                           file_suffix=str(i))
+    return models
+
+
+def load_embeddings(data, embedding_files):
+    embeddings = list()
+    for f in embedding_files:
+        embeddings.append(Embedding(data))
+        embeddings[-1].load(f)
+    return embeddings
+
+
 def main():
-    embeddings = ['../input/embeddings/GoogleNews-vectors-negative300/GoogleNews-vectors-negative300.bin',
-                  '../input/embeddings/glove.840B.300d/glove.840B.300d.txt',
-                  '../input/embeddings/wiki-news-300d-1M/wiki-news-300d-1M.vec',
-                  '../input/embeddings/paragram_300_sl999/paragram_300_sl999.txt'
-                  ]
+    embedding_files = [
+                       '../input/embeddings/GoogleNews-vectors-negative300/GoogleNews-vectors-negative300.bin',
+                       '../input/embeddings/glove.840B.300d/glove.840B.300d.txt',
+                       '../input/embeddings/wiki-news-300d-1M/wiki-news-300d-1M.vec',
+                       '../input/embeddings/paragram_300_sl999/paragram_300_sl999.txt'
+                      ]
     dev_size = None  # set dev_size=None for full-scale runs
     data = Data()
     data.load(dev_size=dev_size)
     data.preprocessing()
-    model = RNNModel(data)
-    model.blend_embeddings(embeddings)
-    model.define_model()
-    model.print()
-    model.fit()
-    pred_val_y = model.predict(data.val_X)
-    model.cleanup()
-    print_wrongest(data.val_df, data.val_y, pred_val_y)
+    embeddings = load_embeddings(data, embedding_files)
+    models_cv = cross_validate(RNNModel, data, embeddings)
+    ensemble_cv = Ensemble(models_cv)
+    pred_val_y = ensemble_cv.predict_average(data.val_X)
     thresh = find_best_threshold(pred_val_y, data.val_y)
     print_diagnostics(data.val_y, (pred_val_y > thresh).astype(int))
-    pred_y_test = model.predict(data.test_X)
-    data.add_pseudo_data(pred_y_test)
-    model.fit(pseudo_labels=True)
-    pred_y_test = model.predict(data.test_X)
+    pred_y_test = ensemble_cv.predict_average(data.test_X)
     write_predictions(data, pred_y_test, thresh)
 
 
