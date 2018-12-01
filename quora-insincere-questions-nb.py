@@ -238,12 +238,13 @@ class Embedding:
 
 
 class RNNModel:
-    def __init__(self, data, name=None):
+    def __init__(self, data, name=None, loss='binary_crossentropy'):
         self.data = data
         self.name = name
         self.embedding = None
         self.model = None
         self.history = None
+        self.loss = loss
 
     def load_embedding(self, embedding_file='../input/embeddings/glove.840B.300d/glove.840B.300d.txt'):
         self.embedding = Embedding(self.data)
@@ -268,18 +269,21 @@ class RNNModel:
 
     @staticmethod
     def f1_score(y_true, y_pred):
-        c1 = K.sum(K.round(K.clip(y_true * y_pred, 0, 1)))
-        c2 = K.sum(K.round(K.clip(y_pred, 0, 1)))
-        c3 = K.sum(K.round(K.clip(y_true, 0, 1)))
+        def recall(y_true, y_pred):
+            true_positives = K.sum(K.round(K.clip(y_true * y_pred, 0, 1)))
+            possible_positives = K.sum(K.round(K.clip(y_true, 0, 1)))
+            recall = true_positives / (possible_positives + K.epsilon())
+            return recall
 
-        if c3 == 0:
-            return 0
+        def precision(y_true, y_pred):
+            true_positives = K.sum(K.round(K.clip(y_true * y_pred, 0, 1)))
+            predicted_positives = K.sum(K.round(K.clip(y_pred, 0, 1)))
+            precision = true_positives / (predicted_positives + K.epsilon())
+            return precision
 
-        precision = c1 / c2
-        recall = c1 / c3
-
-        f1_score = 2 * (precision * recall) / (precision + recall)
-        return f1_score
+        precision = precision(y_true, y_pred)
+        recall = recall(y_true, y_pred)
+        return 2 * ((precision * recall) / (precision + recall + K.epsilon()))
 
     def define_model(self):
         inp = Input(shape=(self.data.maxlen,))
@@ -293,7 +297,7 @@ class RNNModel:
         x = Dropout(0.1)(x)
         x = Dense(1, activation="sigmoid")(x)
         self.model = Model(inputs=inp, outputs=x)
-        self.model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy', self.f1_score])
+        self.model.compile(loss=self.loss, optimizer='adam', metrics=['accuracy', self.f1_score])
         return self.model
 
     def print(self):
@@ -343,7 +347,7 @@ class RNNModel:
         plt.title('model loss')
         plt.ylabel('loss')
         plt.xlabel('epoch')
-        plt.legend(['train', 'val'], loc='upper left')
+        plt.legend(['train', 'val'], loc='best')
         plt.savefig(filename)
         plt.close()
 
@@ -462,7 +466,6 @@ def cross_validate(model_class, data, embeddings, n_splits=3, show_wrongest=True
         logging.info("Running Fold {} of {}".format(i + 1, n_splits))
         models.append(None)
         models[-1] = model_class(data)
-        # TODO: Make embeddings reusable across models
         models[-1].blend_embeddings(embeddings)
         models[-1].define_model()
         models[-1].fit(train_indices=train, val_indices=test, curve_file_suffix=str(i))
@@ -488,10 +491,10 @@ def load_embeddings(data, embedding_files):
 
 def main():
     embedding_files = [
-                       '../input/embeddings/GoogleNews-vectors-negative300/GoogleNews-vectors-negative300.bin',
+                       # '../input/embeddings/GoogleNews-vectors-negative300/GoogleNews-vectors-negative300.bin',
                        '../input/embeddings/glove.840B.300d/glove.840B.300d.txt',
                        '../input/embeddings/wiki-news-300d-1M/wiki-news-300d-1M.vec',
-                       '../input/embeddings/paragram_300_sl999/paragram_300_sl999.txt'
+                       # '../input/embeddings/paragram_300_sl999/paragram_300_sl999.txt'
                       ]
     dev_size = None  # set dev_size=None for full-scale runs
     data = Data()
