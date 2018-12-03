@@ -1,4 +1,7 @@
 import gc
+
+import operator
+import os
 import time
 
 import keras.backend as K
@@ -7,7 +10,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import traceback
+import warnings
 from gensim.models import KeyedVectors
+from keras.callbacks import ModelCheckpoint, EarlyStopping, Callback
 from keras.engine import Layer
 from keras.layers import Bidirectional, CuDNNLSTM, initializers, regularizers, constraints
 from keras.layers import Dense, Input, Embedding as EmbeddingLayer, Dropout
@@ -55,11 +60,21 @@ class Data:
                 filtered.append(w)
         return " ".join(filtered)
 
-    def preprocess_questions(self, questions, remove_stop_words=False):
+    def preprocess_questions(self, questions,
+                             remove_stop_words=False,
+                             remove_contractions=True,
+                             remove_specials=True,
+                             correct_spelling=True):
         questions = questions.str.lower()
         questions = questions.fillna("_na_")
         if remove_stop_words:
             questions = questions.apply(self._remove_stops)
+        if remove_contractions:
+            questions = questions.apply(lambda x: self.clean_contractions(x))
+        if remove_specials:
+            questions = questions.apply(lambda x: self.clean_specials(x))
+        if correct_spelling:
+            questions = questions.apply(lambda x: self.clean_spelling(x))
         return questions
 
     def preprocessing(self):
@@ -104,6 +119,97 @@ class Data:
         self.full_X = np.vstack([self.train_X, self.val_X, self.test_X])
         self.full_y = np.vstack([self.train_y.reshape((len(self.train_y), 1)),
                                  self.val_y.reshape((len(self.val_y), 1)), pred_test_y])
+
+    @staticmethod
+    def clean_contractions(text):
+        contraction_mapping = {"ain't": "is not", "aren't": "are not", "can't": "cannot", "'cause": "because",
+                               "could've": "could have", "couldn't": "could not", "didn't": "did not",
+                               "doesn't": "does not", "don't": "do not", "hadn't": "had not", "hasn't": "has not",
+                               "haven't": "have not", "he'd": "he would", "he'll": "he will", "he's": "he is",
+                               "how'd": "how did", "how'd'y": "how do you", "how'll": "how will", "how's": "how is",
+                               "i'd": "i would", "i'd've": "I would have", "i'll": "i will", "i'll've": "i will have",
+                               "i'm": "i am", "i've": "i have", "i'd": "i would", "i'd've": "i would have",
+                               "i'll": "i will", "i'll've": "i will have", "i'm": "i am", "i've": "i have",
+                               "isn't": "is not", "it'd": "it would", "it'd've": "it would have", "it'll": "it will",
+                               "it'll've": "it will have", "it's": "it is", "let's": "let us", "ma'am": "madam",
+                               "mayn't": "may not", "might've": "might have", "mightn't": "might not",
+                               "mightn't've": "might not have", "must've": "must have", "mustn't": "must not",
+                               "mustn't've": "must not have", "needn't": "need not", "needn't've": "need not have",
+                               "o'clock": "of the clock", "oughtn't": "ought not", "oughtn't've": "ought not have",
+                               "shan't": "shall not", "sha'n't": "shall not", "shan't've": "shall not have",
+                               "she'd": "she would", "she'd've": "she would have", "she'll": "she will",
+                               "she'll've": "she will have", "she's": "she is", "should've": "should have",
+                               "shouldn't": "should not", "shouldn't've": "should not have", "so've": "so have",
+                               "so's": "so as", "this's": "this is", "that'd": "that would",
+                               "that'd've": "that would have", "that's": "that is", "there'd": "there would",
+                               "there'd've": "there would have", "there's": "there is", "here's": "here is",
+                               "they'd": "they would", "they'd've": "they would have", "they'll": "they will",
+                               "they'll've": "they will have", "they're": "they are", "they've": "they have",
+                               "to've": "to have", "wasn't": "was not", "we'd": "we would", "we'd've": "we would have",
+                               "we'll": "we will", "we'll've": "we will have", "we're": "we are", "we've": "we have",
+                               "weren't": "were not", "what'll": "what will", "what'll've": "what will have",
+                               "what're": "what are", "what's": "what is", "what've": "what have", "when's": "when is",
+                               "when've": "when have", "where'd": "where did", "where's": "where is",
+                               "where've": "where have", "who'll": "who will", "who'll've": "who will have",
+                               "who's": "who is", "who've": "who have", "why's": "why is", "why've": "why have",
+                               "will've": "will have", "won't": "will not", "won't've": "will not have",
+                               "would've": "would have", "wouldn't": "would not", "wouldn't've": "would not have",
+                               "y'all": "you all", "y'all'd": "you all would", "y'all'd've": "you all would have",
+                               "y'all're": "you all are", "y'all've": "you all have", "you'd": "you would",
+                               "you'd've": "you would have", "you'll": "you will", "you'll've": "you will have",
+                               "you're": "you are", "you've": "you have"}
+        specials = ["’", "‘", "´", "`"]
+        for s in specials:
+            text = text.replace(s, "'")
+        text = ' '.join([contraction_mapping[t] if t in contraction_mapping else t for t in text.split(" ")])
+        return text
+
+    @staticmethod
+    def clean_specials(text):
+        punct = "/-'?!.,#$%\'()*+-/:;<=>@[\\]^_`{|}~" + '""“”’' + '∞θ÷α•à−β∅³π‘₹´°£€\×™√²—–&'
+        punct_mapping = {"‘": "'", "₹": "e", "´": "'", "°": "", "€": "e", "™": "tm", "√": " sqrt ", "×": "x", "²": "2",
+                         "—": "-", "–": "-", "’": "'", "_": "-", "`": "'", '“': '"', '”': '"', '“': '"', "£": "e",
+                         '∞': 'infinity', 'θ': 'theta', '÷': '/', 'α': 'alpha', '•': '.', 'à': 'a', '−': '-',
+                         'β': 'beta', '∅': '', '³': '3', 'π': 'pi', }
+        for p in punct_mapping:
+            text = text.replace(p, punct_mapping[p])
+        for p in punct:
+            text = text.replace(p, f' {p} ')
+
+        specials = {'\u200b': ' ', '…': ' ... ', '\ufeff': '', 'करना': '',
+                    'है': ''}
+        for s in specials:
+            text = text.replace(s, specials[s])
+        return text
+
+    @staticmethod
+    def clean_spelling(text):
+        misspell_dict = {'colour': 'color', 'centre': 'center', 'favourite': 'favorite', 'travelling': 'traveling',
+                        'counselling': 'counseling', 'theatre': 'theater', 'cancelled': 'canceled', 'labour': 'labor',
+                        'organisation': 'organization', 'wwii': 'world war 2', 'citicise': 'criticize',
+                        'youtu ': 'youtube ', 'Qoura': 'Quora', 'sallary': 'salary', 'Whta': 'What',
+                        'narcisist': 'narcissist', 'howdo': 'how do', 'whatare': 'what are', 'howcan': 'how can',
+                        'howmuch': 'how much', 'howmany': 'how many', 'whydo': 'why do', 'doI': 'do I',
+                        'theBest': 'the best', 'howdoes': 'how does', 'mastrubation': 'masturbation',
+                        'mastrubate': 'masturbate', "mastrubating": 'masturbating', 'pennis': 'penis',
+                        'Etherium': 'Ethereum', 'narcissit': 'narcissist', 'bigdata': 'big data', '2k17': '2017',
+                        '2k18': '2018', 'qouta': 'quota', 'exboyfriend': 'ex boyfriend', 'airhostess': 'air hostess',
+                        "whst": 'what', 'watsapp': 'whatsapp', 'demonitisation': 'demonetization',
+                        'demonitization': 'demonetization', 'demonetisation': 'demonetization'}
+        for word in misspell_dict.keys():
+            text = text.replace(word, misspell_dict[word])
+        return text
+
+    def get_train_vocab(self):
+        sentences = self.train_df['question_text'].apply(lambda x: x.split()).values
+        vocab = {}
+        for sentence in sentences:
+            for word in sentence:
+                try:
+                    vocab[word] += 1
+                except KeyError:
+                    vocab[word] = 1
+        return vocab
 
 
 class Attention(Layer):
@@ -177,6 +283,512 @@ class Attention(Layer):
         return input_shape[0], self.features_dim
 
 
+class OneCycleLR(Callback):
+
+    def __init__(self, num_samples, num_epochs, batch_size, max_lr,
+                 end_percentage=0.1, scale_percentage=None,
+                 maximum_momentum=0.95, minimum_momentum=0.85,
+                 verbose=True):
+        """ This callback implements a cyclical learning rate policy (CLR).
+        This is a special case of Cyclic Learning Rates, where we have only 1 cycle.
+        After the completion of 1 cycle, the learning rate will decrease rapidly to
+        100th its initial lowest value.
+        # Arguments:
+            num_samples: Integer. Number of sample points in the dataset
+            num_epochs: Integer. Number of training epochs
+            batch_size: Integer. Batch size per training epoch
+            max_lr: Float. Initial learning rate. This also sets the
+                starting learning rate (which will be 10x smaller than
+                this), and will increase to this value during the first cycle.
+            end_percentage: Float. The percentage of all the epochs of training
+                that will be dedicated to sharply decreasing the learning
+                rate after the completion of 1 cycle. Must be between 0 and 1.
+            scale_percentage: Float or None. If float, must be between 0 and 1.
+                If None, it will compute the scale_percentage automatically
+                based on the `end_percentage`.
+            maximum_momentum: Optional. Sets the maximum momentum (initial)
+                value, which gradually drops to its lowest value in half-cycle,
+                then gradually increases again to stay constant at this max value.
+                Can only be used with SGD Optimizer.
+            minimum_momentum: Optional. Sets the minimum momentum at the end of
+                the half-cycle. Can only be used with SGD Optimizer.
+            verbose: Bool. Whether to print the current learning rate after every
+                epoch.
+        # Reference
+            - [A disciplined approach to neural network hyper-parameters: Part 1 -- learning rate, batch size, weight_decay, and weight decay](https://arxiv.org/abs/1803.09820)
+            - [Super-Convergence: Very Fast Training of Residual Networks Using Large Learning Rates](https://arxiv.org/abs/1708.07120)
+        """
+        super(OneCycleLR, self).__init__()
+
+        if end_percentage < 0. or end_percentage > 1.:
+            raise ValueError("`end_percentage` must be between 0 and 1")
+
+        if scale_percentage is not None and (scale_percentage < 0. or scale_percentage > 1.):
+            raise ValueError("`scale_percentage` must be between 0 and 1")
+
+        self.num_samples = num_samples
+        self.num_epochs = num_epochs
+        self.batch_size = batch_size
+        self.num_samples_per_batch = max(num_samples // batch_size, 3)
+        self.initial_lr = max_lr
+        self.end_percentage = end_percentage
+        self.scale = float(scale_percentage) if scale_percentage is not None else float(end_percentage)
+        self.max_momentum = maximum_momentum
+        self.min_momentum = minimum_momentum
+        self.verbose = verbose
+
+        self.num_iterations = self.num_epochs * self.num_samples_per_batch
+        self.mid_cycle_id = int(self.num_iterations * ((1. - end_percentage)) / float(2))
+
+        if self.max_momentum is not None and self.min_momentum is not None:
+            self._update_momentum = True
+        else:
+            self._update_momentum = False
+
+        self.clr_iterations = 0.
+        self.history = {}
+
+    def _reset(self):
+        """
+        Reset the callback.
+        """
+        self.clr_iterations = 0.
+        self.history = {}
+
+    def compute_lr(self):
+        """
+        Compute the learning rate based on which phase of the cycle it is in.
+        - If in the first half of training, the learning rate gradually increases.
+        - If in the second half of training, the learning rate gradually decreases.
+        - If in the final `end_percentage` portion of training, the learning rate
+            is quickly reduced to near 100th of the original min learning rate.
+        # Returns:
+            the new learning rate
+        """
+        if self.clr_iterations > 2 * self.mid_cycle_id:
+            current_percentage = (self.clr_iterations - 2 * self.mid_cycle_id)
+            current_percentage /= float((self.num_iterations - 2 * self.mid_cycle_id))
+            new_lr = self.initial_lr * (1. + (current_percentage * (1. - 100.) / 100.)) * self.scale
+
+        elif self.clr_iterations > self.mid_cycle_id:
+            current_percentage = 1. - (self.clr_iterations - self.mid_cycle_id) / self.mid_cycle_id
+            new_lr = self.initial_lr * (1. + current_percentage * (self.scale * 100 - 1.)) * self.scale
+
+        else:
+            current_percentage = self.clr_iterations / self.mid_cycle_id
+            new_lr = self.initial_lr * (1. + current_percentage * (self.scale * 100 - 1.)) * self.scale
+
+        if self.clr_iterations == self.num_iterations:
+            self.clr_iterations = 0
+
+        return new_lr
+
+    def compute_momentum(self):
+        """
+         Compute the momentum based on which phase of the cycle it is in.
+        - If in the first half of training, the momentum gradually decreases.
+        - If in the second half of training, the momentum gradually increases.
+        - If in the final `end_percentage` portion of training, the momentum value
+            is kept constant at the maximum initial value.
+        # Returns:
+            the new momentum value
+        """
+        if self.clr_iterations > 2 * self.mid_cycle_id:
+            new_momentum = self.max_momentum
+
+        elif self.clr_iterations > self.mid_cycle_id:
+            current_percentage = 1. - ((self.clr_iterations - self.mid_cycle_id) / float(self.mid_cycle_id))
+            new_momentum = self.max_momentum - current_percentage * (self.max_momentum - self.min_momentum)
+
+        else:
+            current_percentage = self.clr_iterations / float(self.mid_cycle_id)
+            new_momentum = self.max_momentum - current_percentage * (self.max_momentum - self.min_momentum)
+
+        return new_momentum
+
+    def on_train_begin(self, logs={}):
+        logs = logs or {}
+
+        self._reset()
+        K.set_value(self.model.optimizer.lr, self.compute_lr())
+
+        if self._update_momentum:
+            if not hasattr(self.model.optimizer, 'momentum'):
+                raise ValueError("Momentum can be updated only on SGD optimizer !")
+
+            new_momentum = self.compute_momentum()
+            K.set_value(self.model.optimizer.momentum, new_momentum)
+
+    def on_batch_end(self, epoch, logs=None):
+        logs = logs or {}
+
+        self.clr_iterations += 1
+        new_lr = self.compute_lr()
+
+        self.history.setdefault('lr', []).append(K.get_value(self.model.optimizer.lr))
+        K.set_value(self.model.optimizer.lr, new_lr)
+
+        if self._update_momentum:
+            if not hasattr(self.model.optimizer, 'momentum'):
+                raise ValueError("Momentum can be updated only on SGD optimizer !")
+
+            new_momentum = self.compute_momentum()
+
+            self.history.setdefault('momentum', []).append(K.get_value(self.model.optimizer.momentum))
+            K.set_value(self.model.optimizer.momentum, new_momentum)
+
+        for k, v in logs.items():
+            self.history.setdefault(k, []).append(v)
+
+    def on_epoch_end(self, epoch, logs=None):
+        if self.verbose:
+            if self._update_momentum:
+                print(" - lr: %0.5f - momentum: %0.2f " % (self.history['lr'][-1],
+                                                           self.history['momentum'][-1]))
+
+            else:
+                print(" - lr: %0.5f " % (self.history['lr'][-1]))
+
+
+class LRFinder(Callback):
+
+    def __init__(self, num_samples, batch_size,
+                 minimum_lr=1e-5, maximum_lr=10.,
+                 lr_scale='exp', validation_data=None,
+                 validation_sample_rate=5,
+                 stopping_criterion_factor=4.,
+                 loss_smoothing_beta=0.98,
+                 save_dir=None, verbose=True):
+        """
+        This class uses the Cyclic Learning Rate history to find a
+        set of learning rates that can be good initializations for the
+        One-Cycle training proposed by Leslie Smith in the paper referenced
+        below.
+        A port of the Fast.ai implementation for Keras.
+        # Note
+        This requires that the model be trained for exactly 1 epoch. If the model
+        is trained for more epochs, then the metric calculations are only done for
+        the first epoch.
+        # Interpretation
+        Upon visualizing the loss plot, check where the loss starts to increase
+        rapidly. Choose a learning rate at somewhat prior to the corresponding
+        position in the plot for faster convergence. This will be the maximum_lr lr.
+        Choose the max value as this value when passing the `max_val` argument
+        to OneCycleLR callback.
+        Since the plot is in log-scale, you need to compute 10 ^ (-k) of the x-axis
+        # Arguments:
+            num_samples: Integer. Number of samples in the dataset.
+            batch_size: Integer. Batch size during training.
+            minimum_lr: Float. Initial learning rate (and the minimum).
+            maximum_lr: Float. Final learning rate (and the maximum).
+            lr_scale: Can be one of ['exp', 'linear']. Chooses the type of
+                scaling for each update to the learning rate during subsequent
+                batches. Choose 'exp' for large range and 'linear' for small range.
+            validation_data: Requires the validation dataset as a tuple of
+                (X, y) belonging to the validation set. If provided, will use the
+                validation set to compute the loss metrics. Else uses the training
+                batch loss. Will warn if not provided to alert the user.
+            validation_sample_rate: Positive or Negative Integer. Number of batches to sample from the
+                validation set per iteration of the LRFinder. Larger number of
+                samples will reduce the variance but will take longer time to execute
+                per batch.
+                If Positive > 0, will sample from the validation dataset
+                If Megative, will use the entire dataset
+            stopping_criterion_factor: Integer or None. A factor which is used
+                to measure large increase in the loss value during training.
+                Since callbacks cannot stop training of a model, it will simply
+                stop logging the additional values from the epochs after this
+                stopping criterion has been met.
+                If None, this check will not be performed.
+            loss_smoothing_beta: Float. The smoothing factor for the moving
+                average of the loss function.
+            save_dir: Optional, String. If passed a directory path, the callback
+                will save the running loss and learning rates to two separate numpy
+                arrays inside this directory. If the directory in this path does not
+                exist, they will be created.
+            verbose: Whether to print the learning rate after every batch of training.
+        # References:
+            - [A disciplined approach to neural network hyper-parameters: Part 1 -- learning rate, batch size, weight_decay, and weight decay](https://arxiv.org/abs/1803.09820)
+        """
+        super(LRFinder, self).__init__()
+
+        if lr_scale not in ['exp', 'linear']:
+            raise ValueError("`lr_scale` must be one of ['exp', 'linear']")
+
+        if validation_data is not None:
+            self.validation_data = validation_data
+            self.use_validation_set = True
+
+            if validation_sample_rate > 0 or validation_sample_rate < 0:
+                self.validation_sample_rate = validation_sample_rate
+            else:
+                raise ValueError("`validation_sample_rate` must be a positive or negative integer other than o")
+        else:
+            self.use_validation_set = False
+            self.validation_sample_rate = 0
+
+        self.num_samples = num_samples
+        self.batch_size = batch_size
+        self.initial_lr = minimum_lr
+        self.final_lr = maximum_lr
+        self.lr_scale = lr_scale
+        self.stopping_criterion_factor = stopping_criterion_factor
+        self.loss_smoothing_beta = loss_smoothing_beta
+        self.save_dir = save_dir
+        self.verbose = verbose
+
+        self.num_batches_ = num_samples // batch_size - 1
+        self.current_lr_ = minimum_lr
+
+        if lr_scale == 'exp':
+            self.lr_multiplier_ = (maximum_lr / float(minimum_lr)) ** (1. / float(self.num_batches_))
+        else:
+            extra_batch = int((num_samples % batch_size) != 0)
+            self.lr_multiplier_ = np.linspace(minimum_lr, maximum_lr, num=self.num_batches_ + extra_batch)
+
+        # If negative, use entire validation set
+        if self.validation_sample_rate < 0:
+            self.validation_sample_rate = self.validation_data[0].shape[0] // batch_size
+
+        self.current_batch_ = 0
+        self.current_epoch_ = 0
+        self.best_loss_ = 1e6
+        self.running_loss_ = 0.
+
+        self.history = {}
+
+    def on_train_begin(self, logs=None):
+        self.current_epoch_ = 1
+        K.set_value(self.model.optimizer.lr, self.initial_lr)
+
+        warnings.simplefilter("ignore")
+
+    def on_epoch_begin(self, epoch, logs=None):
+        self.current_batch_ = 0
+
+        if self.current_epoch_ > 1:
+            warnings.warn("\n\nLearning rate finder should be used only with a single epoch. "
+                          "Hereafter, the callback will not measure the losses.\n\n")
+
+    def on_batch_begin(self, batch, logs=None):
+        self.current_batch_ += 1
+
+    def on_batch_end(self, batch, logs=None):
+        if self.current_epoch_ > 1:
+            return
+
+        if self.use_validation_set:
+            X, Y = self.validation_data[0], self.validation_data[1]
+
+            # use 5 random batches from test set for fast approximate of loss
+            num_samples = self.batch_size * self.validation_sample_rate
+
+            if num_samples > X.shape[0]:
+                num_samples = X.shape[0]
+
+            idx = np.random.choice(X.shape[0], num_samples, replace=False)
+            x = X[idx]
+            y = Y[idx]
+
+            values = self.model.evaluate(x, y, batch_size=self.batch_size, verbose=False)
+            loss = values[0]
+        else:
+            loss = logs['loss']
+
+        # smooth the loss value and bias correct
+        running_loss = self.loss_smoothing_beta * loss + (1. - self.loss_smoothing_beta) * loss
+        running_loss = running_loss / (1. - self.loss_smoothing_beta ** self.current_batch_)
+
+        # stop logging if loss is too large
+        if self.current_batch_ > 1 and self.stopping_criterion_factor is not None and (
+                running_loss > self.stopping_criterion_factor * self.best_loss_):
+
+            if self.verbose:
+                print(" - LRFinder: Skipping iteration since loss is %d times as large as best loss (%0.4f)" % (
+                    self.stopping_criterion_factor, self.best_loss_
+                ))
+            return
+
+        if running_loss < self.best_loss_ or self.current_batch_ == 1:
+            self.best_loss_ = running_loss
+
+        current_lr = K.get_value(self.model.optimizer.lr)
+
+        self.history.setdefault('running_loss_', []).append(running_loss)
+        if self.lr_scale == 'exp':
+            self.history.setdefault('log_lrs', []).append(np.log10(current_lr))
+        else:
+            self.history.setdefault('log_lrs', []).append(current_lr)
+
+        # compute the lr for the next batch and update the optimizer lr
+        if self.lr_scale == 'exp':
+            current_lr *= self.lr_multiplier_
+        else:
+            current_lr = self.lr_multiplier_[self.current_batch_ - 1]
+
+        K.set_value(self.model.optimizer.lr, current_lr)
+
+        # save the other metrics as well
+        for k, v in logs.items():
+            self.history.setdefault(k, []).append(v)
+
+        if self.verbose:
+            if self.use_validation_set:
+                print(" - LRFinder: val_loss: %1.4f - lr = %1.8f " % (values[0], current_lr))
+            else:
+                print(" - LRFinder: lr = %1.8f " % current_lr)
+
+    def on_epoch_end(self, epoch, logs=None):
+        if self.save_dir is not None and self.current_epoch_ <= 1:
+            if not os.path.exists(self.save_dir):
+                os.makedirs(self.save_dir)
+
+            losses_path = os.path.join(self.save_dir, 'losses.npy')
+            lrs_path = os.path.join(self.save_dir, 'lrs.npy')
+
+            np.save(losses_path, self.losses)
+            np.save(lrs_path, self.lrs)
+
+            if self.verbose:
+                print("\tLR Finder : Saved the losses and learning rate values in path : {%s}" % (self.save_dir))
+
+        self.current_epoch_ += 1
+
+        warnings.simplefilter("default")
+
+    def plot_schedule(self, filename="lr_schedule.png", clip_beginning=None, clip_endding=None):
+        """
+        Plots the schedule from the callback itself.
+        # Arguments:
+            clip_beginning: Integer or None. If positive integer, it will
+                remove the specified portion of the loss graph to remove the large
+                loss values in the beginning of the graph.
+            clip_endding: Integer or None. If negative integer, it will
+                remove the specified portion of the ending of the loss graph to
+                remove the sharp increase in the loss values at high learning rates.
+        """
+        try:
+            import matplotlib.pyplot as plt
+            plt.style.use('seaborn-white')
+        except ImportError:
+            print("Matplotlib not found. Please use `pip install matplotlib` first.")
+            return
+
+        if clip_beginning is not None and clip_beginning < 0:
+            clip_beginning = -clip_beginning
+
+        if clip_endding is not None and clip_endding > 0:
+            clip_endding = -clip_endding
+
+        losses = self.losses
+        lrs = self.lrs
+
+        if clip_beginning:
+            losses = losses[clip_beginning:]
+            lrs = lrs[clip_beginning:]
+
+        if clip_endding:
+            losses = losses[:clip_endding]
+            lrs = lrs[:clip_endding]
+
+        plt.plot(lrs, losses)
+        plt.gca().set_yscale('log')
+        plt.title('Learning rate vs Loss')
+        plt.xlabel('log(learning rate)')
+        plt.ylabel('log(loss)')
+        plt.savefig(filename)
+
+    @classmethod
+    def restore_schedule_from_dir(cls, directory, clip_beginning=None, clip_endding=None):
+        """
+        Loads the training history from the saved numpy files in the given directory.
+        # Arguments:
+            directory: String. Path to the directory where the serialized numpy
+                arrays of the loss and learning rates are saved.
+            clip_beginning: Integer or None. If positive integer, it will
+                remove the specified portion of the loss graph to remove the large
+                loss values in the beginning of the graph.
+            clip_endding: Integer or None. If negative integer, it will
+                remove the specified portion of the ending of the loss graph to
+                remove the sharp increase in the loss values at high learning rates.
+        Returns:
+            tuple of (losses, learning rates)
+        """
+        if clip_beginning is not None and clip_beginning < 0:
+            clip_beginning = -clip_beginning
+
+        if clip_endding is not None and clip_endding > 0:
+            clip_endding = -clip_endding
+
+        losses_path = os.path.join(directory, 'losses.npy')
+        lrs_path = os.path.join(directory, 'lrs.npy')
+
+        if not os.path.exists(losses_path) or not os.path.exists(lrs_path):
+            print("%s and %s could not be found at directory : {%s}" % (
+                losses_path, lrs_path, directory
+            ))
+
+            losses = None
+            lrs = None
+
+        else:
+            losses = np.load(losses_path)
+            lrs = np.load(lrs_path)
+
+            if clip_beginning:
+                losses = losses[clip_beginning:]
+                lrs = lrs[clip_beginning:]
+
+            if clip_endding:
+                losses = losses[:clip_endding]
+                lrs = lrs[:clip_endding]
+
+        return losses, lrs
+
+    @classmethod
+    def plot_schedule_from_file(cls, directory, clip_beginning=None, clip_endding=None):
+        """
+        Plots the schedule from the saved numpy arrays of the loss and learning
+        rate values in the specified directory.
+        # Arguments:
+            directory: String. Path to the directory where the serialized numpy
+                arrays of the loss and learning rates are saved.
+            clip_beginning: Integer or None. If positive integer, it will
+                remove the specified portion of the loss graph to remove the large
+                loss values in the beginning of the graph.
+            clip_endding: Integer or None. If negative integer, it will
+                remove the specified portion of the ending of the loss graph to
+                remove the sharp increase in the loss values at high learning rates.
+        """
+        try:
+            import matplotlib.pyplot as plt
+            plt.style.use('seaborn-white')
+        except ImportError:
+            print("Matplotlib not found. Please use `pip install matplotlib` first.")
+            return
+
+        losses, lrs = cls.restore_schedule_from_dir(directory,
+                                                    clip_beginning=clip_beginning,
+                                                    clip_endding=clip_endding)
+
+        if losses is None or lrs is None:
+            return
+        else:
+            plt.plot(lrs, losses)
+            plt.title('Learning rate vs Loss')
+            plt.xlabel('learning rate')
+            plt.ylabel('loss')
+            plt.show()
+
+    @property
+    def lrs(self):
+        return np.array(self.history['log_lrs'])
+
+    @property
+    def losses(self):
+        return np.array(self.history['running_loss_'])
+
+
 class Embedding:
     def __init__(self, data):
         self.embeddings_index = None
@@ -236,6 +848,25 @@ class Embedding:
                 self.embedding_matrix[i] = embedding_vector
         return self.embedding_matrix
 
+    def check_coverage(self, vocab):
+        known_words = {}
+        unknown_words = {}
+        nb_known_words = 0
+        nb_unknown_words = 0
+        for word in vocab.keys():
+            try:
+                known_words[word] = self.embeddings_index[word]
+                nb_known_words += vocab[word]
+            except:
+                unknown_words[word] = vocab[word]
+                nb_unknown_words += vocab[word]
+                pass
+
+        print('Found embeddings for {:.2%} of vocab'.format(len(known_words) / len(vocab)))
+        print('Found embeddings for  {:.2%} of all text'.format(nb_known_words / (nb_known_words + nb_unknown_words)))
+        unknown_words = sorted(unknown_words.items(), key=operator.itemgetter(1))[::-1]
+        return unknown_words
+
 
 class RNNModel:
     def __init__(self, data, name=None, loss='binary_crossentropy'):
@@ -245,6 +876,7 @@ class RNNModel:
         self.model = None
         self.history = None
         self.loss = loss
+        self.lr_finder = None
 
     def load_embedding(self, embedding_file='../input/embeddings/glove.840B.300d/glove.840B.300d.txt'):
         self.embedding = Embedding(self.data)
@@ -297,18 +929,32 @@ class RNNModel:
         x = Dropout(0.1)(x)
         x = Dense(1, activation="sigmoid")(x)
         self.model = Model(inputs=inp, outputs=x)
-        self.model.compile(loss=self.loss, optimizer='adam', metrics=['accuracy', self.f1_score])
+        self.model.compile(loss=self.loss, optimizer='sgd', metrics=['accuracy', self.f1_score])
         return self.model
 
     def print(self):
         print(self.model.summary())
+
+    def _get_callbacks(self, epochs, batch_size, minimum_lr=1e-4, maximum_lr=1.0):
+        num_samples = self.data.train_X.shape[0]
+        self.lr_finder = LRFinder(num_samples, batch_size,
+                               minimum_lr, maximum_lr,
+                               # validation_data=(X_val, Y_val),
+                               lr_scale='exp', save_dir='.')
+        lr_manager = OneCycleLR(num_samples, epochs, batch_size, maximum_lr,
+                                end_percentage = 0.1,
+                                maximum_momentum = 0.95, minimum_momentum = 0.85)
+        check_point = ModelCheckpoint('model.hdf5', monitor="val_f1_score", mode="max",
+                                      verbose=True, save_best_only=True)
+        early_stop = EarlyStopping(monitor="val_f1_score", mode="max", patience=2, verbose=True)
+        return [self.lr_finder, lr_manager, check_point, early_stop]
 
     def fit(self,
             train_indices=None,
             val_indices=None,
             pseudo_labels=False,
             batch_size=512,
-            epochs=4,
+            epochs=10,
             save_curve=True,
             curve_file_suffix=None):
         logging.info("Fitting model...")
@@ -328,11 +974,14 @@ class RNNModel:
             else:
                 val_x = self.data.val_X
                 val_y = self.data.val_y
+        callbacks = self._get_callbacks(epochs, batch_size)
         self.history = self.model.fit(train_x, train_y,
                                       batch_size=batch_size,
                                       epochs=epochs,
-                                      validation_data=(val_x, val_y))
+                                      validation_data=(val_x, val_y),
+                                      callbacks=callbacks)
         if save_curve:
+            self.lr_finder.plot_schedule(filename="lr_schedule_" + self.name + ".png")
             filename = 'training_curve'
             if self.name:
                 filename += '_' + self.name
@@ -465,7 +1114,7 @@ def cross_validate(model_class, data, embeddings, n_splits=3, show_wrongest=True
     for i, (train, test) in enumerate(skf.split(data.train_X, data.train_y)):
         logging.info("Running Fold {} of {}".format(i + 1, n_splits))
         models.append(None)
-        models[-1] = model_class(data)
+        models[-1] = model_class(data, name='cv_' + str(i))
         models[-1].blend_embeddings(embeddings)
         models[-1].define_model()
         models[-1].fit(train_indices=train, val_indices=test, curve_file_suffix=str(i))
@@ -477,7 +1126,7 @@ def cross_validate(model_class, data, embeddings, n_splits=3, show_wrongest=True
                            pred_y_val,
                            num_wrongest=20,
                            persist=True,
-                           file_suffix=str(i))
+                           file_suffix=models[-1].name)
     return models
 
 
@@ -494,7 +1143,7 @@ def main():
                        # '../input/embeddings/GoogleNews-vectors-negative300/GoogleNews-vectors-negative300.bin',
                        '../input/embeddings/glove.840B.300d/glove.840B.300d.txt',
                        '../input/embeddings/wiki-news-300d-1M/wiki-news-300d-1M.vec',
-                       # '../input/embeddings/paragram_300_sl999/paragram_300_sl999.txt'
+                       '../input/embeddings/paragram_300_sl999/paragram_300_sl999.txt'
                       ]
     dev_size = None  # set dev_size=None for full-scale runs
     data = Data()
