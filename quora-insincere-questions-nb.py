@@ -14,13 +14,15 @@ import warnings
 from gensim.models import KeyedVectors
 from keras.callbacks import ModelCheckpoint, EarlyStopping, Callback
 from keras.engine import Layer
-from keras.layers import Bidirectional, CuDNNLSTM, initializers, regularizers, constraints
+from keras.layers import Bidirectional, CuDNNLSTM, initializers, regularizers, constraints, Reshape, Conv2D, MaxPool2D, \
+    Concatenate, Flatten, GlobalAveragePooling1D, GlobalMaxPooling1D, concatenate
 from keras.layers import Dense, Input, Embedding as EmbeddingLayer, Dropout
 from keras.models import Model
 from keras.preprocessing.sequence import pad_sequences
 from keras.preprocessing.text import Tokenizer
 from nltk.corpus import stopwords
 from sklearn import metrics
+from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import train_test_split, StratifiedKFold
 
 
@@ -797,9 +799,11 @@ class Embedding:
         self.embed_size = None
         self.embedding_matrix = None
         self.data = data
+        self.name = None
 
     def load(self, embedding_file='../input/embeddings/glove.840B.300d/glove.840B.300d.txt'):
         logging.info("loading embedding : " + embedding_file)
+        self.name = embedding_file.split('/')[3]
 
         def get_coefs(word, *arr):
             return word, np.asarray(arr, dtype='float32')
@@ -862,13 +866,13 @@ class Embedding:
                 nb_unknown_words += vocab[word]
                 pass
 
-        print('Found embeddings for {:.2%} of vocab'.format(len(known_words) / len(vocab)))
-        print('Found embeddings for  {:.2%} of all text'.format(nb_known_words / (nb_known_words + nb_unknown_words)))
+        logging.info('Found embeddings for {:.2%} of vocab'.format(len(known_words) / len(vocab)))
+        logging.info('Found embeddings for  {:.2%} of all text'.format(nb_known_words / (nb_known_words + nb_unknown_words)))
         unknown_words = sorted(unknown_words.items(), key=operator.itemgetter(1))[::-1]
         return unknown_words
 
 
-class RNNModel:
+class InsincereModel:
     def __init__(self, data, name=None, loss='binary_crossentropy'):
         self.data = data
         self.name = name
@@ -918,19 +922,7 @@ class RNNModel:
         return 2 * ((precision * recall) / (precision + recall + K.epsilon()))
 
     def define_model(self):
-        inp = Input(shape=(self.data.maxlen,))
-        x = EmbeddingLayer(self.embedding.nb_words,
-                           self.embedding.embed_size,
-                           weights=[self.embedding.embedding_matrix],
-                           trainable=False)(inp)
-        x = Bidirectional(CuDNNLSTM(64, return_sequences=True))(x)
-        x = Attention(self.data.maxlen)(x)
-        x = Dense(16, activation="relu")(x)
-        x = Dropout(0.1)(x)
-        x = Dense(1, activation="sigmoid")(x)
-        self.model = Model(inputs=inp, outputs=x)
-        self.model.compile(loss=self.loss, optimizer='sgd', metrics=['accuracy', self.f1_score])
-        return self.model
+        raise NotImplementedError
 
     def print(self):
         print(self.model.summary())
@@ -1012,6 +1004,66 @@ class RNNModel:
         time.sleep(10)
 
 
+class LSTMModel(InsincereModel):
+    def define_model(self):
+        inp = Input(shape=(self.data.maxlen,))
+        x = EmbeddingLayer(self.embedding.nb_words,
+                           self.embedding.embed_size,
+                           weights=[self.embedding.embedding_matrix],
+                           trainable=False)(inp)
+        x = Bidirectional(CuDNNLSTM(64, return_sequences=True))(x)
+        avg_pool = GlobalAveragePooling1D()(x)
+        max_pool = GlobalMaxPooling1D()(x)
+        x = concatenate([avg_pool, max_pool])
+        x = Dense(64, activation="relu")(x)
+        x = Dropout(0.1)(x)
+        x = Dense(1, activation="sigmoid")(x)
+        self.model = Model(inputs=inp, outputs=x)
+        self.model.compile(loss=self.loss, optimizer='sgd', metrics=['accuracy', self.f1_score])
+        return self.model
+
+
+class LSTMModelAttention(InsincereModel):
+    def define_model(self):
+        inp = Input(shape=(self.data.maxlen,))
+        x = EmbeddingLayer(self.embedding.nb_words,
+                           self.embedding.embed_size,
+                           weights=[self.embedding.embedding_matrix],
+                           trainable=False)(inp)
+        x = Bidirectional(CuDNNLSTM(64, return_sequences=True))(x)
+        x = Attention(self.data.maxlen)(x)
+        x = Dense(16, activation="relu")(x)
+        x = Dropout(0.1)(x)
+        x = Dense(1, activation="sigmoid")(x)
+        self.model = Model(inputs=inp, outputs=x)
+        self.model.compile(loss=self.loss, optimizer='sgd', metrics=['accuracy', self.f1_score])
+        return self.model
+
+
+class CNNModel(InsincereModel):
+    def define_model(self):
+        filter_sizes = [1, 2, 3, 5]
+        num_filters = 36
+        inp = Input(shape=(self.data.maxlen,))
+        x = EmbeddingLayer(self.embedding.nb_words, self.embedding.embed_size,
+                           weights=[self.embedding.embedding_matrix])(inp)
+        x = Reshape((self.data.maxlen, self.embedding.embed_size, 1))(x)
+        maxpool_pool = []
+        for i in range(len(filter_sizes)):
+            conv = Conv2D(num_filters, kernel_size=(filter_sizes[i], self.embedding.embed_size),
+                          kernel_initializer='he_normal', activation='elu')(x)
+            maxpool_pool.append(MaxPool2D(pool_size=(self.data.maxlen - filter_sizes[i] + 1, 1))(conv))
+
+        z = Concatenate(axis=1)(maxpool_pool)
+        z = Flatten()(z)
+        z = Dropout(0.1)(z)
+        outp = Dense(1, activation="sigmoid")(z)
+        self.model = Model(inputs=inp, outputs=outp)
+        self.model.compile(loss=self.loss, optimizer='sgd', metrics=['accuracy', self.f1_score])
+
+        return self.model
+
+
 class Ensemble:
     def __init__(self, models):
         self.models = models
@@ -1024,6 +1076,16 @@ class Ensemble:
             logging.debug(type(predictions[-1]))
         avg_pred = np.mean(predictions, axis=0)
         return avg_pred
+
+    def predict_linear_regression(self, X_train, y_train, X_predict):
+        predictions_train = [model.predict(X_train) for model in self.models]
+        X = np.asarray(predictions_train)
+        X = X[..., 0]
+        reg = LinearRegression().fit(X.T, y_train)
+        predictions_predict = [model.predict(X_predict) for model in self.models]
+        prediction_lin_reg = np.sum([predictions_predict[i] * reg.coef_[i]
+                                     for i in range(len(predictions_predict))], axis=0)
+        return prediction_lin_reg
 
 
 def find_best_threshold(preds, y):
@@ -1107,14 +1169,14 @@ def print_wrongest(X, y_true, y_pred, num_wrongest=100, print_them=False, persis
     return wrongest_fps, wrongest_fns
 
 
-def cross_validate(model_class, data, embeddings, n_splits=3, show_wrongest=True):
+def cross_validate(model_class, data, embeddings, n_splits=4, show_wrongest=True):
     logging.info("Cross validating model {} using {} folds...".format(model_class.__name__, str(n_splits)))
     skf = StratifiedKFold(n_splits=n_splits, shuffle=True)
     models = list()
     for i, (train, test) in enumerate(skf.split(data.train_X, data.train_y)):
         logging.info("Running Fold {} of {}".format(i + 1, n_splits))
         models.append(None)
-        models[-1] = model_class(data, name='cv_' + str(i))
+        models[-1] = model_class(data, name=model_class.__name__ + '_cv_' + str(i))
         models[-1].blend_embeddings(embeddings)
         models[-1].define_model()
         models[-1].fit(train_indices=train, val_indices=test, curve_file_suffix=str(i))
@@ -1138,6 +1200,20 @@ def load_embeddings(data, embedding_files):
     return embeddings
 
 
+def save_unknown_words(data, embeddings, max_words=None):
+    vocab = data.get_train_vocab()
+    nb_words = 0
+    for v in vocab.items():
+        nb_words += v[1]
+    for emb in embeddings:
+        unknown_words = emb.check_coverage(vocab)
+        df_unknown_words = pd.DataFrame(unknown_words, columns=['word', 'count'])\
+            .sort_values('count', ascending=False)
+        df_unknown_words['frequency'] = df_unknown_words['count'] / nb_words
+        df_unknown_words = df_unknown_words.head(max_words)
+        df_unknown_words.to_csv('unknown_words_' + emb.name + '.csv', index=False)
+
+
 def main():
     embedding_files = [
                        # '../input/embeddings/GoogleNews-vectors-negative300/GoogleNews-vectors-negative300.bin',
@@ -1150,12 +1226,15 @@ def main():
     data.load(dev_size=dev_size)
     data.preprocessing()
     embeddings = load_embeddings(data, embedding_files)
-    models_cv = cross_validate(RNNModel, data, embeddings)
-    ensemble_cv = Ensemble(models_cv)
-    pred_val_y = ensemble_cv.predict_average(data.val_X)
+    save_unknown_words(data, embeddings, max_words=200)
+    models_lstm_attention_cv = cross_validate(LSTMModelAttention, data, embeddings)
+    models_lstm_cv = cross_validate(LSTMModel, data, embeddings)
+    models_cnn_cv = cross_validate(CNNModel, data, embeddings)
+    ensemble_cv = Ensemble(models_lstm_attention_cv + models_cnn_cv + models_lstm_cv)
+    pred_val_y = ensemble_cv.predict_linear_regression(data.val_X, data.val_y, data.val_X)
     thresh = find_best_threshold(pred_val_y, data.val_y)
     print_diagnostics(data.val_y, (pred_val_y > thresh).astype(int))
-    pred_y_test = ensemble_cv.predict_average(data.test_X)
+    pred_y_test = ensemble_cv.predict_linear_regression(data.val_X, data.val_y, data.test_X)
     write_predictions(data, pred_y_test, thresh)
 
 
