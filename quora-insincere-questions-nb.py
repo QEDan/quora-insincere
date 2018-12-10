@@ -66,7 +66,9 @@ class Data:
                              remove_stop_words=False,
                              remove_contractions=True,
                              remove_specials=True,
-                             correct_spelling=True):
+                             correct_spelling=True,
+                             replace_acronyms=True,
+                             replace_non_words=True):
         questions = questions.str.lower()
         questions = questions.fillna("_na_")
         if remove_stop_words:
@@ -77,6 +79,10 @@ class Data:
             questions = questions.apply(lambda x: self.clean_specials(x))
         if correct_spelling:
             questions = questions.apply(lambda x: self.clean_spelling(x))
+        if replace_acronyms:
+            questions = questions.apply(lambda x: self.clean_acronyms(x))
+        if replace_non_words:
+            questions = questions.apply(lambda x: self.clean_non_dictionary(x))
         return questions
 
     def preprocessing(self):
@@ -200,6 +206,77 @@ class Data:
                         'demonitization': 'demonetization', 'demonetisation': 'demonetization'}
         for word in misspell_dict.keys():
             text = text.replace(word, misspell_dict[word])
+        return text
+
+    @staticmethod
+    def clean_acronyms(text):
+        acronym_dict = {'upsc': 'union public service commission',
+                        'aiims': 'all india institute of medical sciences',
+                        'cgl': 'graduate level examination',
+                        'icse': 'indian school certificate exam',
+                        'iiit': 'indian institute of information technology',
+                        'cgpa': 'cumulative grade point average',
+                        'ielts': 'international english language training system',
+                        'ncert': 'national council of education research training',
+                        'isro': 'indian space research organization',
+                        'clat': 'common law admission test',
+                        'ibps': 'institute of banking personnel selection',
+                        'iiser': 'indian institute of science education and research',
+                        'iisc': 'indian institute of science',
+                        'iims': 'indian institutes of management'
+
+                        }
+        for word in acronym_dict.keys():
+            text = text.replace(word, acronym_dict[word])
+        return text
+
+    @staticmethod
+    def clean_non_dictionary(text):
+        replace_dict = {'quorans': 'users',
+                        'quoran': 'user',
+                        'jio': 'phone manufacturer',
+                        'manipal': 'city',
+                        'bitsat': 'exam',
+                        'mtech': 'technical university',
+                        'pilani': 'town',
+                        'bhu': 'university',
+                        'h1b': 'visa',
+                        'redmi': 'phone manufacturer',
+                        'nift': 'university',
+                        'kvpy': 'exam',
+                        'thanos': 'villain',
+                        'paytm': 'payment system',
+                        'comedk': 'medical consortium',
+                        'accenture': 'management consulting company',
+                        'llb': 'bachelor of laws',
+                        'ignou': 'university',
+                        'dtu': 'university',
+                        'aadhar': 'social number',
+                        'lenovo': 'computer manufacturer',
+                        'gmat': 'exam',
+                        'kiit': 'institute of technology',
+                        'shopify': 'music streaming',
+                        'fitjee': 'exam',
+                        'kejriwal': 'politician',
+                        'wbjee': 'exam',
+                        'pgdm': 'master of business administration',
+                        'trudeau': 'politician',
+                        'nri': 'research institute',
+                        'deloitte': 'accounting company',
+                        'jinping': 'politician',
+                        'bcom': 'bachelor of commerce',
+                        'mcom': 'masters of commerce',
+                        'virat': 'athlete',
+                        'kcet': 'television network',
+                        'wipro': 'information technology company',
+                        'articleship': 'internship',
+                        'comey': 'law enforcement director',
+                        'jnu': 'university',
+                        'acca': 'chartered accountants',
+                        'aakash': 'phone manufacturer'
+                        }
+        for word in replace_dict.keys():
+            text = text.replace(word, replace_dict[word])
         return text
 
     def get_train_vocab(self):
@@ -1214,6 +1291,11 @@ def save_unknown_words(data, embeddings, max_words=None):
         df_unknown_words.to_csv('unknown_words_' + emb.name + '.csv', index=False)
 
 
+def cleanup_models(models):
+    for m in models:
+        m.cleanup()
+
+
 def main():
     embedding_files = [
                        # '../input/embeddings/GoogleNews-vectors-negative300/GoogleNews-vectors-negative300.bin',
@@ -1228,8 +1310,11 @@ def main():
     embeddings = load_embeddings(data, embedding_files)
     save_unknown_words(data, embeddings, max_words=200)
     models_lstm_attention_cv = cross_validate(LSTMModelAttention, data, embeddings)
+    cleanup_models(models_lstm_attention_cv)
     models_lstm_cv = cross_validate(LSTMModel, data, embeddings)
+    cleanup_models(models_lstm_cv)
     models_cnn_cv = cross_validate(CNNModel, data, embeddings)
+    cleanup_models(models_cnn_cv)
     ensemble_cv = Ensemble(models_lstm_attention_cv + models_cnn_cv + models_lstm_cv)
     pred_val_y = ensemble_cv.predict_linear_regression(data.val_X, data.val_y, data.val_X)
     thresh = find_best_threshold(pred_val_y, data.val_y)
