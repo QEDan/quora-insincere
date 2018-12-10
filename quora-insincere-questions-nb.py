@@ -1076,9 +1076,12 @@ class InsincereModel:
 
     def cleanup(self):
         logging.info("Releasing memory...")
-        del self.embedding.embeddings_index, self.embedding.embedding_matrix
-        gc.collect()
-        time.sleep(10)
+        try:
+            del self.embedding.embeddings_index, self.embedding.embedding_matrix
+            gc.collect()
+            time.sleep(10)
+        except AttributeError:
+            logging.warning('embeddings not found. They were probably already cleaned up.')
 
 
 class LSTMModel(InsincereModel):
@@ -1188,7 +1191,7 @@ def write_predictions(data, preds, thresh=0.5):
     out_df.to_csv("submission.csv", index=False)
 
 
-def print_diagnostics(y_true, y_pred, persist=True):
+def print_diagnostics(y_true, y_pred, file_suffix='', persist=True):
     try:
         cfn_matrix = metrics.confusion_matrix(y_true, y_pred)
     except ValueError:
@@ -1197,7 +1200,7 @@ def print_diagnostics(y_true, y_pred, persist=True):
         logging.warning("Applying threshold {} to predictions.".format(thresh))
         y_pred = (y_pred > thresh).astype(int)
         cfn_matrix = metrics.confusion_matrix(y_true, y_pred)
-    with open('diagnostics.txt', 'w') if persist else None as f:
+    with open('diagnostics' + file_suffix + '.txt', 'w') if persist else None as f:
         print("Confusion Matrix", file=f)
         print(cfn_matrix, file=f)
         print("-"*40, file=f)
@@ -1253,12 +1256,13 @@ def cross_validate(model_class, data, embeddings, n_splits=4, show_wrongest=True
     for i, (train, test) in enumerate(skf.split(data.train_X, data.train_y)):
         logging.info("Running Fold {} of {}".format(i + 1, n_splits))
         models.append(None)
-        models[-1] = model_class(data, name=model_class.__name__ + '_cv_' + str(i))
+        cv_name = model_class.__name__ + '_cv_' + str(i)
+        models[-1] = model_class(data, name=cv_name)
         models[-1].blend_embeddings(embeddings)
         models[-1].define_model()
         models[-1].fit(train_indices=train, val_indices=test, curve_file_suffix=str(i))
         pred_y_val = models[-1].predict(data.train_X[test])
-        print_diagnostics(data.train_y[test], pred_y_val)
+        print_diagnostics(data.train_y[test], pred_y_val, file_suffix='_' + cv_name)
         if show_wrongest:
             print_wrongest(data.train_df.iloc[test],
                            data.train_y[test],
@@ -1310,12 +1314,11 @@ def main():
     embeddings = load_embeddings(data, embedding_files)
     save_unknown_words(data, embeddings, max_words=200)
     models_lstm_attention_cv = cross_validate(LSTMModelAttention, data, embeddings)
-    cleanup_models(models_lstm_attention_cv)
     models_lstm_cv = cross_validate(LSTMModel, data, embeddings)
-    cleanup_models(models_lstm_cv)
     models_cnn_cv = cross_validate(CNNModel, data, embeddings)
-    cleanup_models(models_cnn_cv)
-    ensemble_cv = Ensemble(models_lstm_attention_cv + models_cnn_cv + models_lstm_cv)
+    models_all = models_lstm_attention_cv + models_cnn_cv + models_lstm_cv
+    cleanup_models(models_all)
+    ensemble_cv = Ensemble(models_all)
     pred_val_y = ensemble_cv.predict_linear_regression(data.val_X, data.val_y, data.val_X)
     thresh = find_best_threshold(pred_val_y, data.val_y)
     print_diagnostics(data.val_y, (pred_val_y > thresh).astype(int))
