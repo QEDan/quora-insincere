@@ -89,10 +89,10 @@ class Data:
             questions = questions.apply(lambda x: self.clean_non_dictionary(x, case_sensitive=case_sensitive))
         return questions
 
-    def preprocessing(self):
+    def preprocessing(self, lower_case=False):
         logging.info("Preprocessing data...")
         for df in [self.train_df, self.test_df]:
-            df['question_text'] = self.preprocess_questions(df['question_text'])
+            df['question_text'] = self.preprocess_questions(df['question_text'], lower_case=lower_case)
         self.split()
         self.get_xs_ys()
         self.tokenize()
@@ -1302,7 +1302,7 @@ def print_wrongest(X, y_true, y_pred, num_wrongest=100, print_them=False, persis
     return wrongest_fps, wrongest_fns
 
 
-def cross_validate(model_class, data, embeddings, n_splits=4, show_wrongest=True):
+def cross_validate(model_class, data, embeddings, n_splits=3, show_wrongest=True):
     logging.info("Cross validating model {} using {} folds...".format(model_class.__name__, str(n_splits)))
     skf = StratifiedKFold(n_splits=n_splits, shuffle=True)
     models = list()
@@ -1326,7 +1326,7 @@ def cross_validate(model_class, data, embeddings, n_splits=4, show_wrongest=True
     return models
 
 
-def load_embeddings(data, embedding_files, keep_index=False):
+def load_embeddings(data, embedding_files, keep_index=True):
     embeddings = list()
     for f in embedding_files:
         embeddings.append(Embedding(data))
@@ -1362,10 +1362,10 @@ def main():
                        '../input/embeddings/wiki-news-300d-1M/wiki-news-300d-1M.vec',
                        '../input/embeddings/paragram_300_sl999/paragram_300_sl999.txt'
                       ]
-    dev_size = 500  # set dev_size=None for full-scale runs
+    dev_size = None  # set dev_size=None for full-scale runs
     data = Data()
     data.load(dev_size=dev_size)
-    data.preprocessing()
+    data.preprocessing(lower_case=True)
     embeddings = load_embeddings(data, embedding_files)
     save_unknown_words(data, embeddings, max_words=200)
     models_lstm_attention_cv = cross_validate(LSTMModelAttention, data, embeddings)
@@ -1381,6 +1381,7 @@ def main():
 
 
 if __name__ == "__main__":
+    logging.getLogger()
     logging.basicConfig(
         filename='log.txt',
         format='%(asctime)s %(levelname)-8s %(message)s',
