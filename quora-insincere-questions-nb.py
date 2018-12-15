@@ -9,6 +9,7 @@ import logging
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import re
 import traceback
 import warnings
 from gensim.models import KeyedVectors
@@ -63,14 +64,17 @@ class Data:
         return " ".join(filtered)
 
     def preprocess_questions(self, questions,
+                             lower_case=False,
                              remove_stop_words=False,
                              remove_contractions=True,
                              remove_specials=True,
                              correct_spelling=True,
                              replace_acronyms=True,
                              replace_non_words=True):
-        questions = questions.str.lower()
         questions = questions.fillna("_na_")
+        case_sensitive = not lower_case
+        if lower_case:
+            questions = questions.str.lower()
         if remove_stop_words:
             questions = questions.apply(self._remove_stops)
         if remove_contractions:
@@ -78,11 +82,11 @@ class Data:
         if remove_specials:
             questions = questions.apply(lambda x: self.clean_specials(x))
         if correct_spelling:
-            questions = questions.apply(lambda x: self.clean_spelling(x))
+            questions = questions.apply(lambda x: self.clean_spelling(x, case_sensitive=case_sensitive))
         if replace_acronyms:
-            questions = questions.apply(lambda x: self.clean_acronyms(x))
+            questions = questions.apply(lambda x: self.clean_acronyms(x, case_sensitive=case_sensitive))
         if replace_non_words:
-            questions = questions.apply(lambda x: self.clean_non_dictionary(x))
+            questions = questions.apply(lambda x: self.clean_non_dictionary(x, case_sensitive=case_sensitive))
         return questions
 
     def preprocessing(self):
@@ -135,8 +139,8 @@ class Data:
                                "doesn't": "does not", "don't": "do not", "hadn't": "had not", "hasn't": "has not",
                                "haven't": "have not", "he'd": "he would", "he'll": "he will", "he's": "he is",
                                "how'd": "how did", "how'd'y": "how do you", "how'll": "how will", "how's": "how is",
-                               "i'd": "i would", "i'd've": "I would have", "i'll": "i will", "i'll've": "i will have",
-                               "i'm": "i am", "i've": "i have", "i'd": "i would", "i'd've": "i would have",
+                               "I'd": "i would", "I'd've": "I would have", "I'll": "i will", "I'll've": "i will have",
+                               "I'm": "i am", "I've": "i have", "i'd": "i would", "i'd've": "i would have",
                                "i'll": "i will", "i'll've": "i will have", "i'm": "i am", "i've": "i have",
                                "isn't": "is not", "it'd": "it would", "it'd've": "it would have", "it'll": "it will",
                                "it'll've": "it will have", "it's": "it is", "let's": "let us", "ma'am": "madam",
@@ -191,7 +195,7 @@ class Data:
         return text
 
     @staticmethod
-    def clean_spelling(text):
+    def clean_spelling(text, case_sensitive=False):
         misspell_dict = {'colour': 'color', 'centre': 'center', 'favourite': 'favorite', 'travelling': 'traveling',
                         'counselling': 'counseling', 'theatre': 'theater', 'cancelled': 'canceled', 'labour': 'labor',
                         'organisation': 'organization', 'wwii': 'world war 2', 'citicise': 'criticize',
@@ -205,11 +209,15 @@ class Data:
                         "whst": 'what', 'watsapp': 'whatsapp', 'demonitisation': 'demonetization',
                         'demonitization': 'demonetization', 'demonetisation': 'demonetization'}
         for word in misspell_dict.keys():
-            text = text.replace(word, misspell_dict[word])
+            if case_sensitive:
+                text = text.replace(word, misspell_dict[word])
+            else:
+                re_insensitive = re.compile(re.escape(word), re.IGNORECASE)
+                text = re_insensitive.sub(misspell_dict[word], text)
         return text
 
     @staticmethod
-    def clean_acronyms(text):
+    def clean_acronyms(text, case_sensitive=False):
         acronym_dict = {'upsc': 'union public service commission',
                         'aiims': 'all india institute of medical sciences',
                         'cgl': 'graduate level examination',
@@ -223,15 +231,20 @@ class Data:
                         'ibps': 'institute of banking personnel selection',
                         'iiser': 'indian institute of science education and research',
                         'iisc': 'indian institute of science',
-                        'iims': 'indian institutes of management'
+                        'iims': 'indian institutes of management',
+                        'cpec': 'china pakistan economic corridor'
 
                         }
         for word in acronym_dict.keys():
-            text = text.replace(word, acronym_dict[word])
+            if case_sensitive:
+                text = text.replace(word, acronym_dict[word])
+            else:
+                re_insensitive = re.compile(re.escape(word), re.IGNORECASE)
+                text = re_insensitive.sub(acronym_dict[word], text)
         return text
 
     @staticmethod
-    def clean_non_dictionary(text):
+    def clean_non_dictionary(text, case_sensitive=False):
         replace_dict = {'quorans': 'users',
                         'quoran': 'user',
                         'jio': 'phone manufacturer',
@@ -244,7 +257,7 @@ class Data:
                         'redmi': 'phone manufacturer',
                         'nift': 'university',
                         'kvpy': 'exam',
-                        'thanos': 'villain',
+                        'thanos': 'comic villain',
                         'paytm': 'payment system',
                         'comedk': 'medical consortium',
                         'accenture': 'management consulting company',
@@ -273,10 +286,28 @@ class Data:
                         'comey': 'law enforcement director',
                         'jnu': 'university',
                         'acca': 'chartered accountants',
-                        'aakash': 'phone manufacturer'
+                        'aakash': 'phone manufacturer',
+                        'brexit': 'british succession',
+                        'crypto': 'digital currency',
+                        'cryptocurrency': 'digital currency',
+                        'cryptocurrencies': 'digital currencies',
+                        'etherium': 'digital currency',
+                        'bitcoin': 'digital currency',
+                        'viteee': 'exam',
+                        'iocl': 'indian oil company',
+                        'nmims': 'management school',
+                        'rohingya': 'myanmar people',
+                        'fortnite': 'videogame',
+                        'upes': 'university',
+                        'nsit': 'university',
+                        'coinbase': 'digital currency exchange'
                         }
         for word in replace_dict.keys():
-            text = text.replace(word, replace_dict[word])
+            if case_sensitive:
+                text = text.replace(word, replace_dict[word])
+            else:
+                re_insensitive = re.compile(re.escape(word), re.IGNORECASE)
+                text = re_insensitive.sub(replace_dict[word], text)
         return text
 
     def get_train_vocab(self):
@@ -948,6 +979,24 @@ class Embedding:
         unknown_words = sorted(unknown_words.items(), key=operator.itemgetter(1))[::-1]
         return unknown_words
 
+    def cleanup(self):
+        logging.info("Releasing memory...")
+        try:
+            del self.embeddings_index, self.embedding_matrix
+            gc.collect()
+            time.sleep(10)
+        except AttributeError:
+            logging.warning('embeddings index not found. They were probably already cleaned up.')
+
+    def cleanup_index(self):
+        logging.info("Releasing memory...")
+        try:
+            del self.embeddings_index
+            gc.collect()
+            time.sleep(10)
+        except AttributeError:
+            logging.warning('embeddings index not found. They were probably already cleaned up.')
+
 
 class InsincereModel:
     def __init__(self, data, name=None, loss='binary_crossentropy'):
@@ -969,7 +1018,7 @@ class InsincereModel:
         else:
             self.embedding = embedding
 
-    def blend_embeddings(self, embeddings):
+    def blend_embeddings(self, embeddings, cleanup=False):
         """Average embedding matrix given list of embedding files."""
         if self.embedding is None:
             self.set_embedding(embeddings[0])
@@ -978,7 +1027,17 @@ class InsincereModel:
             embedding_matrices.append(emb.embedding_matrix)
         blend = np.mean(embedding_matrices, axis=0)
         self.embedding.embedding_matrix = blend
+        if cleanup:
+            for e in embeddings:
+                e.cleanup()
         return blend
+
+    def concat_embeddings(self, embeddings, cleanup=False):
+        self.embedding.embedding_matrix = np.concatenate(tuple([e.embedding_matrix for e in embeddings]), axis=1)
+        if cleanup:
+            for e in embeddings:
+                e.cleanup()
+        return self.embedding.embedding_matrix
 
     @staticmethod
     def f1_score(y_true, y_pred):
@@ -1075,13 +1134,7 @@ class InsincereModel:
         return prediction
 
     def cleanup(self):
-        logging.info("Releasing memory...")
-        try:
-            del self.embedding.embeddings_index, self.embedding.embedding_matrix
-            gc.collect()
-            time.sleep(10)
-        except AttributeError:
-            logging.warning('embeddings not found. They were probably already cleaned up.')
+        self.embedding.cleanup()
 
 
 class LSTMModel(InsincereModel):
@@ -1273,11 +1326,13 @@ def cross_validate(model_class, data, embeddings, n_splits=4, show_wrongest=True
     return models
 
 
-def load_embeddings(data, embedding_files):
+def load_embeddings(data, embedding_files, keep_index=False):
     embeddings = list()
     for f in embedding_files:
         embeddings.append(Embedding(data))
         embeddings[-1].load(f)
+        if not keep_index:
+            embeddings[-1].cleanup_index()
     return embeddings
 
 
@@ -1307,16 +1362,15 @@ def main():
                        '../input/embeddings/wiki-news-300d-1M/wiki-news-300d-1M.vec',
                        '../input/embeddings/paragram_300_sl999/paragram_300_sl999.txt'
                       ]
-    dev_size = None  # set dev_size=None for full-scale runs
+    dev_size = 500  # set dev_size=None for full-scale runs
     data = Data()
     data.load(dev_size=dev_size)
     data.preprocessing()
     embeddings = load_embeddings(data, embedding_files)
     save_unknown_words(data, embeddings, max_words=200)
     models_lstm_attention_cv = cross_validate(LSTMModelAttention, data, embeddings)
-    models_lstm_cv = cross_validate(LSTMModel, data, embeddings)
     models_cnn_cv = cross_validate(CNNModel, data, embeddings)
-    models_all = models_lstm_attention_cv + models_cnn_cv + models_lstm_cv
+    models_all = models_lstm_attention_cv + models_cnn_cv
     cleanup_models(models_all)
     ensemble_cv = Ensemble(models_all)
     pred_val_y = ensemble_cv.predict_linear_regression(data.val_X, data.val_y, data.val_X)
@@ -1328,6 +1382,7 @@ def main():
 
 if __name__ == "__main__":
     logging.basicConfig(
+        filename='log.txt',
         format='%(asctime)s %(levelname)-8s %(message)s',
         level=logging.DEBUG,
         datefmt='%Y-%m-%d %H:%M:%S')
