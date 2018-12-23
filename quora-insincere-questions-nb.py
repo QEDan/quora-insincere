@@ -1,15 +1,16 @@
 import gc
-
-import operator
-import os
 import time
 
 import keras.backend as K
 import logging
 import matplotlib.pyplot as plt
 import numpy as np
+import operator
+import os
 import pandas as pd
+import random
 import re
+import tensorflow as tf
 import traceback
 import warnings
 from gensim.models import KeyedVectors
@@ -25,6 +26,13 @@ from nltk.corpus import stopwords
 from sklearn import metrics
 from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import train_test_split, StratifiedKFold
+from sklearn.preprocessing import StandardScaler
+
+SEED = 42
+np.random.seed(SEED)
+tf.set_random_seed(SEED)
+os.environ['PYTHONHASHSEED'] = str(SEED)
+random.seed(SEED)
 
 
 class Data:
@@ -44,6 +52,7 @@ class Data:
         self.maxlen = None
         self.tokenizer = None
         self.max_feature = None
+        self.custom_features = None
 
     def load(self, dev_size=None):
         logging.info("Loading data...")
@@ -70,7 +79,8 @@ class Data:
                              remove_specials=True,
                              correct_spelling=True,
                              replace_acronyms=True,
-                             replace_non_words=True):
+                             replace_non_words=True,
+                             replace_numbers=True):
         questions = questions.fillna("_na_")
         case_sensitive = not lower_case
         if lower_case:
@@ -87,16 +97,21 @@ class Data:
             questions = questions.apply(lambda x: self.clean_acronyms(x, case_sensitive=case_sensitive))
         if replace_non_words:
             questions = questions.apply(lambda x: self.clean_non_dictionary(x, case_sensitive=case_sensitive))
+        if replace_numbers:
+            questions = questions.apply(lambda x: self.clean_numbers(x))
         return questions
 
-    def preprocessing(self, lower_case=False):
+    def preprocessing(self, lower_case=False, use_custom_features=True):
         logging.info("Preprocessing data...")
         for df in [self.train_df, self.test_df]:
             df['question_text'] = self.preprocess_questions(df['question_text'], lower_case=lower_case)
+            if use_custom_features:
+                df = self.add_features(df)
         self.split()
         self.get_xs_ys()
         self.tokenize()
         self.pad_sequences()
+        # TODO: Combine custom features with sequences.
 
     def split(self, test_size=0.1, random_state=2018):
         logging.info("Train/Eval split...")
@@ -118,6 +133,12 @@ class Data:
         self.test_X = tokenizer.texts_to_sequences(self.test_X)
         self.tokenizer = tokenizer
         self.max_feature = max_feature
+
+    def append_features(self):
+        self.train_X = [self.train_X, np.array(self.train_df[self.custom_features])]
+        self.val_X = [self.val_X, np.array(self.val_df[self.custom_features])]
+        self.test_X = [self.test_X, np.array(self.test_df[self.custom_features])]
+
 
     def pad_sequences(self, maxlen=100):
         logging.info("Padding Sequences...")
@@ -179,13 +200,23 @@ class Data:
     @staticmethod
     def clean_specials(text):
         punct = "/-'?!.,#$%\'()*+-/:;<=>@[\\]^_`{|}~" + '""“”’' + '∞θ÷α•à−β∅³π‘₹´°£€\×™√²—–&'
+        puncts = [',', '.', '"', ':', ')', '(', '-', '!', '?', '|', ';', "'", '$', '&', '/', '[', ']', '>', '%', '=',
+                  '#', '*', '+', '\\', '•', '~', '@', '£',
+                  '·', '_', '{', '}', '©', '^', '®', '`', '<', '→', '°', '€', '™', '›', '♥', '←', '×', '§', '″', '′',
+                  'Â', '█', '½', 'à', '…',
+                  '“', '★', '”', '–', '●', 'â', '►', '−', '¢', '²', '¬', '░', '¶', '↑', '±', '¿', '▾', '═', '¦', '║',
+                  '―', '¥', '▓', '—', '‹', '─',
+                  '▒', '：', '¼', '⊕', '▼', '▪', '†', '■', '’', '▀', '¨', '▄', '♫', '☆', 'é', '¯', '♦', '¤', '▲', 'è',
+                  '¸', '¾', 'Ã', '⋅', '‘', '∞',
+                  '∙', '）', '↓', '、', '│', '（', '»', '，', '♪', '╩', '╚', '³', '・', '╦', '╣', '╔', '╗', '▬', '❤', 'ï',
+                  'Ø', '¹', '≤', '‡', '√', ]
         punct_mapping = {"‘": "'", "₹": "e", "´": "'", "°": "", "€": "e", "™": "tm", "√": " sqrt ", "×": "x", "²": "2",
                          "—": "-", "–": "-", "’": "'", "_": "-", "`": "'", '“': '"', '”': '"', '“': '"', "£": "e",
                          '∞': 'infinity', 'θ': 'theta', '÷': '/', 'α': 'alpha', '•': '.', 'à': 'a', '−': '-',
                          'β': 'beta', '∅': '', '³': '3', 'π': 'pi', }
         for p in punct_mapping:
             text = text.replace(p, punct_mapping[p])
-        for p in punct:
+        for p in set(list(punct) + puncts) - set(punct_mapping.keys()):
             text = text.replace(p, f' {p} ')
 
         specials = {'\u200b': ' ', '…': ' ... ', '\ufeff': '', 'करना': '',
@@ -309,6 +340,30 @@ class Data:
                 re_insensitive = re.compile(re.escape(word), re.IGNORECASE)
                 text = re_insensitive.sub(replace_dict[word], text)
         return text
+
+    @staticmethod
+    def clean_numbers(text, min_magnitude=2, max_magnitude=10):
+        for n in range(min_magnitude, max_magnitude):
+            text = re.sub('[0-9]{' + str(n) + '}', '#'*n, text)
+        return text
+
+    def add_features(self, df):
+        df['question_text'] = df['question_text'].apply(lambda x: str(x))
+        df['total_length'] = df['question_text'].apply(len)
+        df['capitals'] = df['question_text'].apply(lambda comment: sum(1 for c in comment if c.isupper()))
+        df['caps_vs_length'] = df.apply(lambda row: float(row['capitals']) / float(row['total_length']),
+                                                 axis=1)
+        df['num_words'] = df.question_text.str.count('\S+')
+        df['num_unique_words'] = df['question_text'].apply(
+            lambda comment: len(set(w for w in comment.split())))
+        df['words_vs_unique'] = df['num_unique_words'] / df['num_words']
+        df['caps_vs_length'] = df['caps_vs_length'].fillna(0)
+        df['words_vs_unique'] = df['words_vs_unique'].fillna(0)
+        self.custom_features = ['total_length', 'capitals', 'caps_vs_length', 'num_words',
+                                'num_unique_words', 'words_vs_unique', 'caps_vs_length',
+                                'words_vs_unique']
+        # TODO: Feature normalization/scaling
+        return df
 
     def get_train_vocab(self):
         sentences = self.train_df['question_text'].apply(lambda x: x.split()).values
@@ -1081,8 +1136,8 @@ class InsincereModel:
             train_indices=None,
             val_indices=None,
             pseudo_labels=False,
-            batch_size=512,
-            epochs=10,
+            batch_size=1024,
+            epochs=5,
             save_curve=True,
             curve_file_suffix=None):
         logging.info("Fitting model...")
@@ -1302,7 +1357,7 @@ def print_wrongest(X, y_true, y_pred, num_wrongest=100, print_them=False, persis
     return wrongest_fps, wrongest_fns
 
 
-def cross_validate(model_class, data, embeddings, n_splits=3, show_wrongest=True):
+def cross_validate(model_class, data, embeddings, n_splits=4, show_wrongest=True):
     logging.info("Cross validating model {} using {} folds...".format(model_class.__name__, str(n_splits)))
     skf = StratifiedKFold(n_splits=n_splits, shuffle=True)
     models = list()
