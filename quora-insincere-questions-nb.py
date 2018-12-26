@@ -53,6 +53,9 @@ class Data:
         self.tokenizer = None
         self.max_feature = None
         self.custom_features = None
+        self.train_features = None
+        self.val_features = None
+        self.test_features = None
 
     def load(self, dev_size=None):
         logging.info("Loading data...")
@@ -111,11 +114,14 @@ class Data:
         self.get_xs_ys()
         self.tokenize()
         self.pad_sequences()
-        # TODO: Combine custom features with sequences.
 
     def split(self, test_size=0.1, random_state=2018):
         logging.info("Train/Eval split...")
         self.train_df, self.val_df = train_test_split(self.train_df, test_size=test_size, random_state=random_state)
+        if self.custom_features:
+            self.train_features = self.train_df[self.custom_features].values
+            self.val_features = self.val_df[self.custom_features].values
+            self.test_features = self.test_df[self.custom_features].values
 
     def get_xs_ys(self):
         self.train_X = self.train_df["question_text"].values
@@ -138,7 +144,6 @@ class Data:
         self.train_X = [self.train_X, np.array(self.train_df[self.custom_features])]
         self.val_X = [self.val_X, np.array(self.val_df[self.custom_features])]
         self.test_X = [self.test_X, np.array(self.test_df[self.custom_features])]
-
 
     def pad_sequences(self, maxlen=100):
         logging.info("Padding Sequences...")
@@ -1137,28 +1142,42 @@ class InsincereModel:
             val_indices=None,
             pseudo_labels=False,
             batch_size=1024,
-            epochs=5,
+            epochs=4,
             save_curve=True,
             curve_file_suffix=None):
         logging.info("Fitting model...")
         if pseudo_labels:
             train_x, train_y = self.data.full_X, self.data.full_y
             val_x, val_y = self.data.val_X, self.data.val_y
+            if self.data.custom_features:
+                train_features, val_features = self.data.train_features, self.data.test_features
         else:
             if train_indices is not None:
                 train_x = self.data.train_X[train_indices]
                 train_y = self.data.train_y[train_indices]
+                if self.data.custom_features:
+                    train_features = self.data.train_features[train_indices]
             else:
                 train_x = self.data.train_X
                 train_y = self.data.train_y
+                if self.data.custom_features:
+                    train_features = self.data.train_features
             if val_indices is not None:
                 val_x = self.data.train_X[val_indices]
                 val_y = self.data.train_y[val_indices]
+                if self.data.custom_features:
+                    val_features = self.data.train_features[val_indices]
             else:
                 val_x = self.data.val_X
                 val_y = self.data.val_y
+                if self.data.custom_features:
+                    val_features = self.data.val_features
         callbacks = self._get_callbacks(epochs, batch_size)
-        self.history = self.model.fit(train_x, train_y,
+        if self.data.custom_features:
+            train_x = [train_x, train_features]
+            val_x = [val_x, val_features]
+        self.history = self.model.fit(train_x,
+                                      train_y,
                                       batch_size=batch_size,
                                       epochs=epochs,
                                       validation_data=(val_x, val_y),
@@ -1185,7 +1204,7 @@ class InsincereModel:
 
     def predict(self, x, batch_size=1024):
         logging.info("Predicting ...")
-        prediction = self.model.predict([x], batch_size=batch_size, verbose=1)
+        prediction = self.model.predict(x, batch_size=batch_size, verbose=1)
         return prediction
 
     def cleanup(self):
@@ -1202,11 +1221,17 @@ class LSTMModel(InsincereModel):
         x = Bidirectional(CuDNNLSTM(64, return_sequences=True))(x)
         avg_pool = GlobalAveragePooling1D()(x)
         max_pool = GlobalMaxPooling1D()(x)
-        x = concatenate([avg_pool, max_pool])
+        concat_layers = [avg_pool, max_pool]
+        inputs = [inp]
+        if self.data.custom_features:
+            inp_features = Input(shape=(len(self.data.custom_features),))
+            concat_layers += [inp_features]
+            inputs += [inp_features]
+        x = concatenate([avg_pool, max_pool, inp_features])
         x = Dense(64, activation="relu")(x)
         x = Dropout(0.1)(x)
         x = Dense(1, activation="sigmoid")(x)
-        self.model = Model(inputs=inp, outputs=x)
+        self.model = Model(inputs=inputs, outputs=x)
         self.model.compile(loss=self.loss, optimizer='sgd', metrics=['accuracy', self.f1_score])
         return self.model
 
@@ -1220,10 +1245,15 @@ class LSTMModelAttention(InsincereModel):
                            trainable=False)(inp)
         x = Bidirectional(CuDNNLSTM(64, return_sequences=True))(x)
         x = Attention(self.data.maxlen)(x)
+        inputs = [inp]
+        if self.data.custom_features:
+            inp_features = Input(shape=(len(self.data.custom_features),))
+            x = concatenate([x, inp_features])
+            inputs += [inp_features]
         x = Dense(16, activation="relu")(x)
         x = Dropout(0.1)(x)
         x = Dense(1, activation="sigmoid")(x)
-        self.model = Model(inputs=inp, outputs=x)
+        self.model = Model(inputs=inputs, outputs=x)
         self.model.compile(loss=self.loss, optimizer='sgd', metrics=['accuracy', self.f1_score])
         return self.model
 
@@ -1237,16 +1267,20 @@ class CNNModel(InsincereModel):
                            weights=[self.embedding.embedding_matrix])(inp)
         x = Reshape((self.data.maxlen, self.embedding.embed_size, 1))(x)
         maxpool_pool = []
+        inputs = [inp]
         for i in range(len(filter_sizes)):
             conv = Conv2D(num_filters, kernel_size=(filter_sizes[i], self.embedding.embed_size),
                           kernel_initializer='he_normal', activation='elu')(x)
             maxpool_pool.append(MaxPool2D(pool_size=(self.data.maxlen - filter_sizes[i] + 1, 1))(conv))
-
         z = Concatenate(axis=1)(maxpool_pool)
         z = Flatten()(z)
         z = Dropout(0.1)(z)
+        if self.data.custom_features:
+            inp_features = Input(shape=(len(self.data.custom_features),))
+            z = concatenate([z, inp_features])
+            inputs += [inp_features]
         outp = Dense(1, activation="sigmoid")(z)
-        self.model = Model(inputs=inp, outputs=outp)
+        self.model = Model(inputs=inputs, outputs=outp)
         self.model.compile(loss=self.loss, optimizer='sgd', metrics=['accuracy', self.f1_score])
 
         return self.model
@@ -1357,7 +1391,7 @@ def print_wrongest(X, y_true, y_pred, num_wrongest=100, print_them=False, persis
     return wrongest_fps, wrongest_fns
 
 
-def cross_validate(model_class, data, embeddings, n_splits=4, show_wrongest=True):
+def cross_validate(model_class, data, embeddings, n_splits=3, show_wrongest=True):
     logging.info("Cross validating model {} using {} folds...".format(model_class.__name__, str(n_splits)))
     skf = StratifiedKFold(n_splits=n_splits, shuffle=True)
     models = list()
@@ -1369,7 +1403,11 @@ def cross_validate(model_class, data, embeddings, n_splits=4, show_wrongest=True
         models[-1].blend_embeddings(embeddings)
         models[-1].define_model()
         models[-1].fit(train_indices=train, val_indices=test, curve_file_suffix=str(i))
-        pred_y_val = models[-1].predict(data.train_X[test])
+        if data.custom_features:
+            predict_X = [data.train_X[test], data.train_features[test]]
+        else:
+            predict_X = [data.train_X[test]]
+        pred_y_val = models[-1].predict(predict_X)
         print_diagnostics(data.train_y[test], pred_y_val, file_suffix='_' + cv_name)
         if show_wrongest:
             print_wrongest(data.train_df.iloc[test],
@@ -1428,10 +1466,15 @@ def main():
     models_all = models_lstm_attention_cv + models_cnn_cv
     cleanup_models(models_all)
     ensemble_cv = Ensemble(models_all)
-    pred_val_y = ensemble_cv.predict_linear_regression(data.val_X, data.val_y, data.val_X)
+    val_X = [data.val_X]
+    test_X = [data.test_X]
+    if data.custom_features:
+        val_X += [data.val_features]
+        test_X += [data.test_features]
+    pred_val_y = ensemble_cv.predict_linear_regression(val_X, data.val_y, val_X)
     thresh = find_best_threshold(pred_val_y, data.val_y)
     print_diagnostics(data.val_y, (pred_val_y > thresh).astype(int))
-    pred_y_test = ensemble_cv.predict_linear_regression(data.val_X, data.val_y, data.test_X)
+    pred_y_test = ensemble_cv.predict_linear_regression(val_X, data.val_y, test_X)
     write_predictions(data, pred_y_test, thresh)
 
 
