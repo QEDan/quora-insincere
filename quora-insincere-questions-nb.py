@@ -26,7 +26,6 @@ from nltk.corpus import stopwords
 from sklearn import metrics
 from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import train_test_split, StratifiedKFold
-from sklearn.preprocessing import StandardScaler
 
 SEED = 42
 np.random.seed(SEED)
@@ -83,7 +82,7 @@ class Data:
                              correct_spelling=True,
                              replace_acronyms=True,
                              replace_non_words=True,
-                             replace_numbers=True):
+                             replace_numbers=False):
         questions = questions.fillna("_na_")
         case_sensitive = not lower_case
         if lower_case:
@@ -104,7 +103,7 @@ class Data:
             questions = questions.apply(lambda x: self.clean_numbers(x))
         return questions
 
-    def preprocessing(self, lower_case=False, use_custom_features=True):
+    def preprocessing(self, lower_case=False, use_custom_features=False):
         logging.info("Preprocessing data...")
         for df in [self.train_df, self.test_df]:
             df['question_text'] = self.preprocess_questions(df['question_text'], lower_case=lower_case)
@@ -1134,7 +1133,7 @@ class InsincereModel:
                                 maximum_momentum = 0.95, minimum_momentum = 0.85)
         check_point = ModelCheckpoint('model.hdf5', monitor="val_f1_score", mode="max",
                                       verbose=True, save_best_only=True)
-        early_stop = EarlyStopping(monitor="val_f1_score", mode="max", patience=2, verbose=True)
+        early_stop = EarlyStopping(monitor="val_f1_score", mode="max", patience=3, verbose=True)
         return [self.lr_finder, lr_manager, check_point, early_stop]
 
     def fit(self,
@@ -1142,7 +1141,7 @@ class InsincereModel:
             val_indices=None,
             pseudo_labels=False,
             batch_size=1024,
-            epochs=4,
+            epochs=10,
             save_curve=True,
             curve_file_suffix=None):
         logging.info("Fitting model...")
@@ -1249,6 +1248,7 @@ class LSTMModelAttention(InsincereModel):
         if self.data.custom_features:
             inp_features = Input(shape=(len(self.data.custom_features),))
             x = concatenate([x, inp_features])
+            x = Dense(32, activation="relu")(x)
             inputs += [inp_features]
         x = Dense(16, activation="relu")(x)
         x = Dropout(0.1)(x)
@@ -1278,6 +1278,7 @@ class CNNModel(InsincereModel):
         if self.data.custom_features:
             inp_features = Input(shape=(len(self.data.custom_features),))
             z = concatenate([z, inp_features])
+            z = Dense(32, activation='relu')(z)
             inputs += [inp_features]
         outp = Dense(1, activation="sigmoid")(z)
         self.model = Model(inputs=inputs, outputs=outp)
@@ -1481,7 +1482,6 @@ def main():
 if __name__ == "__main__":
     logging.getLogger()
     logging.basicConfig(
-        filename='log.txt',
         format='%(asctime)s %(levelname)-8s %(message)s',
         level=logging.DEBUG,
         datefmt='%Y-%m-%d %H:%M:%S')
