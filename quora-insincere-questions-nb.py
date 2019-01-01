@@ -25,7 +25,9 @@ from keras.preprocessing.text import Tokenizer
 from nltk.corpus import stopwords
 from sklearn import metrics
 from sklearn.linear_model import LinearRegression
+from sklearn.metrics import precision_recall_curve
 from sklearn.model_selection import train_test_split, StratifiedKFold
+from sklearn.preprocessing import StandardScaler
 
 SEED = 42
 np.random.seed(SEED)
@@ -55,6 +57,7 @@ class Data:
         self.train_features = None
         self.val_features = None
         self.test_features = None
+        self.feature_scaler = None
 
     def load(self, dev_size=None):
         logging.info("Loading data...")
@@ -103,12 +106,14 @@ class Data:
             questions = questions.apply(lambda x: self.clean_numbers(x))
         return questions
 
-    def preprocessing(self, lower_case=False, use_custom_features=False):
+    def preprocessing(self, lower_case=False, use_custom_features=True):
         logging.info("Preprocessing data...")
         for df in [self.train_df, self.test_df]:
-            df['question_text'] = self.preprocess_questions(df['question_text'], lower_case=lower_case)
             if use_custom_features:
                 df = self.add_features(df)
+            df['question_text'] = self.preprocess_questions(df['question_text'], lower_case=lower_case)
+        if use_custom_features:
+            self.scale_features()
         self.split()
         self.get_xs_ys()
         self.tokenize()
@@ -363,11 +368,23 @@ class Data:
         df['words_vs_unique'] = df['num_unique_words'] / df['num_words']
         df['caps_vs_length'] = df['caps_vs_length'].fillna(0)
         df['words_vs_unique'] = df['words_vs_unique'].fillna(0)
+        df['num_exclamation_marks'] = df['question_text'].apply(lambda comment: comment.count('!'))
+        df['num_question_marks'] = df['question_text'].apply(lambda comment: comment.count('?'))
+        df['num_smilies'] = df['question_text'].apply(
+            lambda comment: sum(comment.count(w) for w in (':-)', ':)', ';-)', ';)')))
         self.custom_features = ['total_length', 'capitals', 'caps_vs_length', 'num_words',
                                 'num_unique_words', 'words_vs_unique', 'caps_vs_length',
-                                'words_vs_unique']
-        # TODO: Feature normalization/scaling
+                                'words_vs_unique', 'num_exclamation_marks', 'num_question_marks', 'num_smilies']
         return df
+
+    def scale_features(self):
+        self.feature_scaler = StandardScaler()
+        features = self.train_df[self.custom_features]
+        test_features = self.test_df[self.custom_features]
+        self.feature_scaler.fit(features)
+        self.train_df[self.custom_features] = self.feature_scaler.transform(features)
+        self.test_df[self.custom_features] = self.feature_scaler.transform(test_features)
+
 
     def get_train_vocab(self):
         sentences = self.train_df['question_text'].apply(lambda x: x.split()).values
@@ -453,7 +470,6 @@ class Attention(Layer):
 
 
 class OneCycleLR(Callback):
-
     def __init__(self, num_samples, num_epochs, batch_size, max_lr,
                  end_percentage=0.1, scale_percentage=None,
                  maximum_momentum=0.95, minimum_momentum=0.85,
@@ -1122,7 +1138,7 @@ class InsincereModel:
     def print(self):
         print(self.model.summary())
 
-    def _get_callbacks(self, epochs, batch_size, minimum_lr=1e-4, maximum_lr=1.0):
+    def _get_callbacks(self, epochs, batch_size, minimum_lr=1e-8, maximum_lr=1.0e-1):
         num_samples = self.data.train_X.shape[0]
         self.lr_finder = LRFinder(num_samples, batch_size,
                                minimum_lr, maximum_lr,
@@ -1182,7 +1198,7 @@ class InsincereModel:
                                       validation_data=(val_x, val_y),
                                       callbacks=callbacks)
         if save_curve:
-            self.lr_finder.plot_schedule(filename="lr_schedule_" + self.name + ".png")
+            self.lr_finder.plot_schedule(filename="lr_schedule_" + str(self.name) + ".png")
             filename = 'training_curve'
             if self.name:
                 filename += '_' + self.name
@@ -1311,19 +1327,20 @@ class Ensemble:
         return prediction_lin_reg
 
 
-def find_best_threshold(preds, y):
-    # TODO: Use an actual optimizer here rather than grid search.
-    logging.info("Finding the best threshold...")
-    best_thresh = -100
-    best_score = -100
-    for thresh in np.arange(0.1, 0.501, 0.01):
-        thresh = np.round(thresh, 2)
-        score = metrics.f1_score(y, (preds > thresh).astype(int))
-        if score > best_score:
-            best_score = score
-            best_thresh = thresh
-        logging.info("F1 score at threshold {0} is {1}".format(thresh, score))
-    return best_thresh
+def find_best_threshold(y_proba, y_true, plot=False):
+    logging.info("Finding best threshold...")
+    precision, recall, thresholds = precision_recall_curve(y_true, y_proba)
+    thresholds = np.append(thresholds, 1.001)
+    F = 2 / (1/precision + 1/recall)
+    best_score = np.max(F)
+    best_th = thresholds[np.argmax(F)]
+    logging.info("Best score = {}. Best threshold = {}".format(best_score, best_th))
+    if plot:
+        plt.plot(thresholds, F, '-b')
+        plt.plot([best_th], [best_score], '*r')
+        plt.savefig('threshold.png')
+        plt.close()
+    return best_th
 
 
 def write_predictions(data, preds, thresh=0.5):
@@ -1462,6 +1479,11 @@ def main():
     data.preprocessing(lower_case=True)
     embeddings = load_embeddings(data, embedding_files)
     save_unknown_words(data, embeddings, max_words=200)
+    # models_all = LSTMModel(data=data)
+    # models_all.blend_embeddings(embeddings)
+    # models_all.define_model()
+    # models_all.fit()
+    # models_all = [models_all]
     models_lstm_attention_cv = cross_validate(LSTMModelAttention, data, embeddings)
     models_cnn_cv = cross_validate(CNNModel, data, embeddings)
     models_all = models_lstm_attention_cv + models_cnn_cv
