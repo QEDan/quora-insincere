@@ -1,0 +1,15 @@
+h5py
+ipython
+jupyter
+kaggle
+keras
+matplotlib
+nltk
+numpy
+pandas
+scikit-learn
+scipy
+stickytape
+tensorboard
+tensorflow-gpu
+
