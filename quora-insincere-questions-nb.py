@@ -1489,13 +1489,16 @@ def main():
     models_all = models_lstm_attention_cv + models_cnn_cv
     cleanup_models(models_all)
     ensemble_cv = Ensemble(models_all)
+    train_X = [data.train_X]
     val_X = [data.val_X]
     test_X = [data.test_X]
     if data.custom_features:
+        train_X += [data.train_features]
         val_X += [data.val_features]
         test_X += [data.test_features]
+    pred_train_y = ensemble_cv.predict_linear_regression(train_X, data.train_y, train_X)
+    thresh = find_best_threshold(pred_train_y, data.train_y)
     pred_val_y = ensemble_cv.predict_linear_regression(val_X, data.val_y, val_X)
-    thresh = find_best_threshold(pred_val_y, data.val_y)
     print_diagnostics(data.val_y, (pred_val_y > thresh).astype(int))
     pred_y_test = ensemble_cv.predict_linear_regression(val_X, data.val_y, test_X)
     write_predictions(data, pred_y_test, thresh)

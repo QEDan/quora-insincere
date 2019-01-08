@@ -2,4 +2,6 @@
 *.csv
 *.png
 .idea/
+*.npy
+*.hdf5
 *~
