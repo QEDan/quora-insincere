@@ -112,7 +112,7 @@ def cross_validate(model_class, data, embeddings, n_splits=3, show_wrongest=True
         models.append(None)
         cv_name = model_class.__name__ + '_cv_' + str(i)
         models[-1] = model_class(data, name=cv_name)
-        models[-1].blend_embeddings(embeddings)
+        models[-1].concat_embeddings(embeddings)
         models[-1].define_model()
         models[-1].fit(train_indices=train, val_indices=test, curve_file_suffix=str(i))
         if data.custom_features:
@@ -164,10 +164,10 @@ def main():
     embedding_files = [
                        # '../input/embeddings/GoogleNews-vectors-negative300/GoogleNews-vectors-negative300.bin',
                        '../input/embeddings/glove.840B.300d/glove.840B.300d.txt',
-                       '../input/embeddings/wiki-news-300d-1M/wiki-news-300d-1M.vec',
+                       # '../input/embeddings/wiki-news-300d-1M/wiki-news-300d-1M.vec',
                        '../input/embeddings/paragram_300_sl999/paragram_300_sl999.txt'
                       ]
-    dev_size = 500  # set dev_size=None for full-scale runs
+    dev_size = None  # set dev_size=None for full-scale runs
     data = Data()
     data.load(dev_size=dev_size)
     data.preprocessing(lower_case=True)
@@ -192,9 +192,9 @@ def main():
         test_X += [data.test_features]
     pred_train_y = ensemble_cv.predict_linear_regression(train_X, data.train_y, train_X)
     thresh = find_best_threshold(pred_train_y, data.train_y)
-    pred_val_y = ensemble_cv.predict_linear_regression(val_X, data.val_y, val_X)
+    pred_val_y = ensemble_cv.predict_linear_regression(train_X, data.train_y, val_X)
     print_diagnostics(data.val_y, (pred_val_y > thresh).astype(int))
-    pred_y_test = ensemble_cv.predict_linear_regression(val_X, data.val_y, test_X)
+    pred_y_test = ensemble_cv.predict_linear_regression(train_X, data.train_y, test_X)
     write_predictions(data, pred_y_test, thresh)
 
 

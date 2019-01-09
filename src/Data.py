@@ -107,7 +107,7 @@ class Data:
         self.train_y = self.train_df['target'].values
         self.val_y = self.val_df['target'].values
 
-    def tokenize(self, max_feature=50000):
+    def tokenize(self, max_feature=120000):
         logging.info("Tokenizing...")
         tokenizer = Tokenizer(num_words=max_feature)
         tokenizer.fit_on_texts(list(self.train_X))
@@ -122,7 +122,7 @@ class Data:
         self.val_X = [self.val_X, np.array(self.val_df[self.custom_features])]
         self.test_X = [self.test_X, np.array(self.test_df[self.custom_features])]
 
-    def pad_sequences(self, maxlen=100):
+    def pad_sequences(self, maxlen=72):
         logging.info("Padding Sequences...")
         self.train_X = pad_sequences(self.train_X, maxlen=maxlen)
         self.val_X = pad_sequences(self.val_X, maxlen=maxlen)

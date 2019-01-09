@@ -44,7 +44,10 @@ class InsincereModel:
         return blend
 
     def concat_embeddings(self, embeddings, cleanup=False):
+        if self.embedding is None:
+            self.set_embedding(embeddings[0])
         self.embedding.embedding_matrix = np.concatenate(tuple([e.embedding_matrix for e in embeddings]), axis=1)
+        self.embedding.embed_size = self.embedding.embedding_matrix.shape[1]
         if cleanup:
             for e in embeddings:
                 e.cleanup()
@@ -92,7 +95,7 @@ class InsincereModel:
             train_indices=None,
             val_indices=None,
             pseudo_labels=False,
-            batch_size=1024,
+            batch_size=1536,
             epochs=10,
             save_curve=True,
             curve_file_suffix=None):
