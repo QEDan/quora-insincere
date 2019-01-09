@@ -103,7 +103,7 @@ def print_wrongest(X, y_true, y_pred, num_wrongest=100, print_them=False, persis
     return wrongest_fps, wrongest_fns
 
 
-def cross_validate(model_class, data, embeddings, n_splits=3, show_wrongest=True):
+def cross_validate(model_class, data, embeddings, n_splits=4, show_wrongest=True):
     logging.info("Cross validating model {} using {} folds...".format(model_class.__name__, str(n_splits)))
     skf = StratifiedKFold(n_splits=n_splits, shuffle=True)
     models = list()
@@ -112,7 +112,7 @@ def cross_validate(model_class, data, embeddings, n_splits=3, show_wrongest=True
         models.append(None)
         cv_name = model_class.__name__ + '_cv_' + str(i)
         models[-1] = model_class(data, name=cv_name)
-        models[-1].concat_embeddings(embeddings)
+        models[-1].blend_embeddings(embeddings)
         models[-1].define_model()
         models[-1].fit(train_indices=train, val_indices=test, curve_file_suffix=str(i))
         if data.custom_features:
@@ -179,8 +179,8 @@ def main():
     # models_all.fit()
     # models_all = [models_all]
     models_lstm_attention_cv = cross_validate(LSTMModelAttention, data, embeddings)
-    models_cnn_cv = cross_validate(CNNModel, data, embeddings)
-    models_all = models_lstm_attention_cv + models_cnn_cv
+    # models_cnn_cv = cross_validate(CNNModel, data, embeddings)
+    models_all = models_lstm_attention_cv # + models_cnn_cv
     cleanup_models(models_all)
     ensemble_cv = Ensemble(models_all)
     train_X = [data.train_X]
