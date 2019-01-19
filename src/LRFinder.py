@@ -4,16 +4,12 @@ import os
 import warnings
 from keras.callbacks import Callback
 
+from src.config import config_lrfinder as config
+
 
 class LRFinder(Callback):
 
-    def __init__(self, num_samples, batch_size,
-                 minimum_lr=1e-5, maximum_lr=10.,
-                 lr_scale='exp', validation_data=None,
-                 validation_sample_rate=5,
-                 stopping_criterion_factor=4.,
-                 loss_smoothing_beta=0.98,
-                 save_dir=None, verbose=True):
+    def __init__(self, num_samples, batch_size, validation_data=None):
         """
         This class uses the Cyclic Learning Rate history to find a
         set of learning rates that can be good initializations for the
@@ -67,6 +63,14 @@ class LRFinder(Callback):
         """
         super(LRFinder, self).__init__()
 
+        minimum_lr = config.get('minimum_lr')
+        maximum_lr = config.get('maximum_lr')
+        lr_scale = config.get('lr_scale')
+        validation_sample_rate = config.get('validation_sample_rate')
+        stopping_criterion_factor = config.get('stopping_criterion_factor')
+        loss_smoothing_beta = config.get('loss_smoothing_beta')
+        save_dir = config.get('save_dir')
+        verbose = config.get('verbose')
         if lr_scale not in ['exp', 'linear']:
             raise ValueError("`lr_scale` must be one of ['exp', 'linear']")
 

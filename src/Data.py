@@ -8,6 +8,8 @@ from nltk.corpus import stopwords
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 
+from src.config import config_data, random_state
+
 
 class Data:
     def __init__(self, train_path="../input/train.csv", test_path="../input/test.csv"):
@@ -31,6 +33,7 @@ class Data:
         self.val_features = None
         self.test_features = None
         self.feature_scaler = None
+        self.config = config_data
 
     def load(self, dev_size=None):
         logging.info("Loading data...")
@@ -50,51 +53,46 @@ class Data:
                 filtered.append(w)
         return " ".join(filtered)
 
-    def preprocess_questions(self, questions,
-                             lower_case=False,
-                             remove_stop_words=False,
-                             remove_contractions=True,
-                             remove_specials=True,
-                             correct_spelling=True,
-                             replace_acronyms=True,
-                             replace_non_words=True,
-                             replace_numbers=False):
+    def preprocess_questions(self, questions):
         questions = questions.fillna("_na_")
-        case_sensitive = not lower_case
-        if lower_case:
+        preprocess_config = self.config.get('preprocess')
+        case_sensitive = not preprocess_config.get('lower_case')
+        if preprocess_config.get('lower_case'):
             questions = questions.str.lower()
-        if remove_stop_words:
+        if preprocess_config.get('remove_stop_words'):
             questions = questions.apply(self._remove_stops)
-        if remove_contractions:
+        if preprocess_config.get('remove_contractions'):
             questions = questions.apply(lambda x: self.clean_contractions(x))
-        if remove_specials:
+        if preprocess_config.get('remove_specials'):
             questions = questions.apply(lambda x: self.clean_specials(x))
-        if correct_spelling:
+        if preprocess_config.get('correct_spelling'):
             questions = questions.apply(lambda x: self.clean_spelling(x, case_sensitive=case_sensitive))
-        if replace_acronyms:
+        if preprocess_config.get('replace_acronyms'):
             questions = questions.apply(lambda x: self.clean_acronyms(x, case_sensitive=case_sensitive))
-        if replace_non_words:
+        if preprocess_config.get('replace_non_words'):
             questions = questions.apply(lambda x: self.clean_non_dictionary(x, case_sensitive=case_sensitive))
-        if replace_numbers:
+        if preprocess_config.get('replace_numbers'):
             questions = questions.apply(lambda x: self.clean_numbers(x))
         return questions
 
-    def preprocessing(self, lower_case=False, use_custom_features=True):
+    def preprocessing(self):
         logging.info("Preprocessing data...")
         for df in [self.train_df, self.test_df]:
-            if use_custom_features:
+            if self.config.get('preprocess').get('use_custom_features'):
                 df = self.add_features(df)
-            df['question_text'] = self.preprocess_questions(df['question_text'], lower_case=lower_case)
-        if use_custom_features:
+            df['question_text'] = self.preprocess_questions(df['question_text'])
+        if self.config.get('preprocess').get('use_custom_features'):
             self.scale_features()
         self.split()
         self.get_xs_ys()
         self.tokenize()
         self.pad_sequences()
 
-    def split(self, test_size=0.1, random_state=2018):
+    def split(self):
         logging.info("Train/Eval split...")
-        self.train_df, self.val_df = train_test_split(self.train_df, test_size=test_size, random_state=random_state)
+        self.train_df, self.val_df = train_test_split(self.train_df,
+                                                      test_size=self.config.get('test_size'),
+                                                      random_state=random_state)
         if self.custom_features:
             self.train_features = self.train_df[self.custom_features].values
             self.val_features = self.val_df[self.custom_features].values
@@ -107,8 +105,9 @@ class Data:
         self.train_y = self.train_df['target'].values
         self.val_y = self.val_df['target'].values
 
-    def tokenize(self, max_feature=120000):
+    def tokenize(self):
         logging.info("Tokenizing...")
+        max_feature = self.config.get('max_feature')
         tokenizer = Tokenizer(num_words=max_feature)
         tokenizer.fit_on_texts(list(self.train_X))
         self.train_X = tokenizer.texts_to_sequences(self.train_X)
@@ -122,8 +121,9 @@ class Data:
         self.val_X = [self.val_X, np.array(self.val_df[self.custom_features])]
         self.test_X = [self.test_X, np.array(self.test_df[self.custom_features])]
 
-    def pad_sequences(self, maxlen=72):
+    def pad_sequences(self):
         logging.info("Padding Sequences...")
+        maxlen = self.config.get('max_seq_len')
         self.train_X = pad_sequences(self.train_X, maxlen=maxlen)
         self.val_X = pad_sequences(self.val_X, maxlen=maxlen)
         self.test_X = pad_sequences(self.test_X, maxlen=maxlen)

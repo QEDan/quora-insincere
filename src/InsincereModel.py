@@ -7,6 +7,7 @@ from keras.callbacks import ModelCheckpoint, EarlyStopping
 from src.Embedding import Embedding
 from src.LRFinder import LRFinder
 from src.OneCycleLR import OneCycleLR
+from src.config import config_insincere_model
 
 
 class InsincereModel:
@@ -18,6 +19,7 @@ class InsincereModel:
         self.history = None
         self.loss = loss
         self.lr_finder = None
+        self.config = config_insincere_model
 
     def load_embedding(self, embedding_file='../input/embeddings/glove.840B.300d/glove.840B.300d.txt'):
         self.embedding = Embedding(self.data)
@@ -77,30 +79,29 @@ class InsincereModel:
     def print(self):
         print(self.model.summary())
 
-    def _get_callbacks(self, epochs, batch_size, minimum_lr=1e-8, maximum_lr=1.0e-1):
+    def _get_callbacks(self, epochs, batch_size):
+        config = self.config.get('callbacks')
         num_samples = self.data.train_X.shape[0]
-        self.lr_finder = LRFinder(num_samples, batch_size,
-                               minimum_lr, maximum_lr,
-                               # validation_data=(X_val, Y_val),
-                               lr_scale='exp', save_dir='.')
-        lr_manager = OneCycleLR(num_samples, epochs, batch_size, maximum_lr,
-                                end_percentage = 0.1,
-                                maximum_momentum = 0.95, minimum_momentum = 0.85)
-        check_point = ModelCheckpoint('model.hdf5', monitor="val_f1_score", mode="max",
-                                      verbose=True, save_best_only=True)
-        early_stop = EarlyStopping(monitor="val_f1_score", mode="max", patience=3, verbose=True)
+        self.lr_finder = LRFinder(num_samples, batch_size)
+        lr_manager = OneCycleLR(num_samples, epochs, batch_size)
+        check_point = ModelCheckpoint('model.hdf5',
+                                      monitor=config.get('checkpoint').get('monitor'),
+                                      mode=config.get('checkpoint').get('mode'),
+                                      verbose=config.get('checkpoint').get('verbose'),
+                                      save_best_only=config.get('checkpoint').get('save_best_only'))
+        early_stop = EarlyStopping(monitor=config.get('early_stopping').get('monitor'),
+                                   mode=config.get('early_stopping').get('mode'),
+                                   patience=config.get('early_stopping').get('patience'),
+                                   verbose=config.get('early_stopping').get('verbose'))
         return [self.lr_finder, lr_manager, check_point, early_stop]
 
     def fit(self,
             train_indices=None,
             val_indices=None,
-            pseudo_labels=False,
-            batch_size=1536,
-            epochs=10,
-            save_curve=True,
             curve_file_suffix=None):
         logging.info("Fitting model...")
-        if pseudo_labels:
+        config = self.config.get('fit')
+        if config.get('pseudo_labels'):
             train_x, train_y = self.data.full_X, self.data.full_y
             val_x, val_y = self.data.val_X, self.data.val_y
             if self.data.custom_features:
@@ -126,17 +127,17 @@ class InsincereModel:
                 val_y = self.data.val_y
                 if self.data.custom_features:
                     val_features = self.data.val_features
-        callbacks = self._get_callbacks(epochs, batch_size)
+        callbacks = self._get_callbacks(config.get('epochs'), config.get('batch_size'))
         if self.data.custom_features:
             train_x = [train_x, train_features]
             val_x = [val_x, val_features]
         self.history = self.model.fit(train_x,
                                       train_y,
-                                      batch_size=batch_size,
-                                      epochs=epochs,
+                                      batch_size=config.get('batch_size'),
+                                      epochs=config.get('epochs'),
                                       validation_data=(val_x, val_y),
                                       callbacks=callbacks)
-        if save_curve:
+        if config.get('save_curve'):
             self.lr_finder.plot_schedule(filename="lr_schedule_" + str(self.name) + ".png")
             filename = 'training_curve'
             if self.name:
@@ -156,9 +157,11 @@ class InsincereModel:
         plt.savefig(filename)
         plt.close()
 
-    def predict(self, x, batch_size=1024):
+    def predict(self, x):
         logging.info("Predicting ...")
-        prediction = self.model.predict(x, batch_size=batch_size, verbose=1)
+        batch_size = self.config.get('predict').get('batch_size')
+        verbose = self.config.get('predict').get('verbose')
+        prediction = self.model.predict(x, batch_size=batch_size, verbose=verbose)
         return prediction
 
     def cleanup(self):
