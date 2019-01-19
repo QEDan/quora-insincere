@@ -167,10 +167,10 @@ def main():
                        # '../input/embeddings/wiki-news-300d-1M/wiki-news-300d-1M.vec',
                        '../input/embeddings/paragram_300_sl999/paragram_300_sl999.txt'
                       ]
-    dev_size = None  # set dev_size=None for full-scale runs
+    dev_size = 500  # set dev_size=None for full-scale runs
     data = Data()
     data.load(dev_size=dev_size)
-    data.preprocessing(lower_case=True)
+    data.preprocessing()
     embeddings = load_embeddings(data, embedding_files)
     save_unknown_words(data, embeddings, max_words=200)
     # models_all = LSTMModel(data=data)
