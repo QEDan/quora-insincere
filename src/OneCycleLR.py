@@ -1,12 +1,11 @@
 import keras.backend as K
 from keras.callbacks import Callback
 
+from src.config import config_one_cycle as config
+
 
 class OneCycleLR(Callback):
-    def __init__(self, num_samples, num_epochs, batch_size, max_lr,
-                 end_percentage=0.1, scale_percentage=None,
-                 maximum_momentum=0.95, minimum_momentum=0.85,
-                 verbose=True):
+    def __init__(self, num_samples, num_epochs, batch_size):
         """ This callback implements a cyclical learning rate policy (CLR).
         This is a special case of Cyclic Learning Rates, where we have only 1 cycle.
         After the completion of 1 cycle, the learning rate will decrease rapidly to
@@ -37,6 +36,13 @@ class OneCycleLR(Callback):
             - [Super-Convergence: Very Fast Training of Residual Networks Using Large Learning Rates](https://arxiv.org/abs/1708.07120)
         """
         super(OneCycleLR, self).__init__()
+
+        end_percentage = config.get('end_percentage')
+        scale_percentage = config.get('scale_percentage')
+        maximum_momentum = config.get('maximum_momentum')
+        minimum_momentum = config.get('minimum_momentum')
+        max_lr = config.get('max_lr')
+        verbose = config.get('verbose')
 
         if end_percentage < 0. or end_percentage > 1.:
             raise ValueError("`end_percentage` must be between 0 and 1")

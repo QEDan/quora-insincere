@@ -13,8 +13,8 @@ from src.Data import Data
 from src.Embedding import Embedding
 from src.Ensemble import Ensemble
 from src.Models import LSTMModelAttention, CNNModel
+from src.config import random_state as SEED, config_main as config
 
-SEED = 42
 np.random.seed(SEED)
 tf.set_random_seed(SEED)
 os.environ['PYTHONHASHSEED'] = str(SEED)
@@ -161,13 +161,8 @@ def cleanup_models(models):
 
 
 def main():
-    embedding_files = [
-                       # '../input/embeddings/GoogleNews-vectors-negative300/GoogleNews-vectors-negative300.bin',
-                       '../input/embeddings/glove.840B.300d/glove.840B.300d.txt',
-                       # '../input/embeddings/wiki-news-300d-1M/wiki-news-300d-1M.vec',
-                       '../input/embeddings/paragram_300_sl999/paragram_300_sl999.txt'
-                      ]
-    dev_size = 500  # set dev_size=None for full-scale runs
+    embedding_files = config.get('embedding_files')
+    dev_size = config.get('dev_size')
     data = Data()
     data.load(dev_size=dev_size)
     data.preprocessing()

@@ -16,6 +16,45 @@ config_data = {'preprocess': {'lower_case': False,
                'max_seq_len': 72
                }
 
-config_lrfinder = {}
+config_insincere_model = {'callbacks': {'checkpoint': {'monitor': 'val_f1_score',
+                                                       'mode': 'max',
+                                                       'verbose': True,
+                                                       'save_best_only': True},
+                                        'early_stopping': {'monitor': 'val_f1_score',
+                                                           'mode': 'max',
+                                                           'patience': 3,
+                                                           'verbose': True}
+                                        },
+                          'fit': {'pseudo_labels': False,
+                                  'batch_size': 1536,
+                                  'epochs': 10,
+                                  'save_curve': True
+                                  },
+                          'predict': {'batch_size': 1024,
+                                      'verbose': True}
+                          }
 
-config_attention = {}
+config_lrfinder = {'minimum_lr': 1e-5,
+                   'maximum_lr': 10.0,
+                   'lr_scale': 'exp',
+                   'validation_sample_rate': 5,
+                   'stopping_criterion_factor': 4,
+                   'loss_smoothing_beta': 0.98,
+                   'save_dir': None,
+                   'verbose': True
+                   }
+
+config_one_cycle = {'end_percentage': 0.1,
+                    'scale_percentage': None,
+                    'maximum_momentum': 0.95,
+                    'minimum_momentum': 0.85,
+                    'max_lr': 1.0e-1,
+                    'verbose': True}
+
+config_main = {'embedding_files': [# '../input/embeddings/GoogleNews-vectors-negative300/GoogleNews-vectors-negative300.bin',
+                                   '../input/embeddings/glove.840B.300d/glove.840B.300d.txt',
+                                   # '../input/embeddings/wiki-news-300d-1M/wiki-news-300d-1M.vec',
+                                   '../input/embeddings/paragram_300_sl999/paragram_300_sl999.txt'
+                                  ],
+               'dev_size': 500
+              }
