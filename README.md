@@ -1,4 +1,4 @@
-# Quora Insincere Questions Kaggle Competiton
+# Quora Insincere Questions Kaggle Competito
 
 ## To submit
 
