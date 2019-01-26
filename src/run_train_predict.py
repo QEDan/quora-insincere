@@ -12,7 +12,7 @@ from sklearn.model_selection import StratifiedKFold
 from src.Data import Data
 from src.Embedding import Embedding
 from src.Ensemble import Ensemble
-from src.Models import LSTMModelAttention, CNNModel
+from src.Models import *  # Make all models available for easy script generation
 from src.config import random_state as SEED, config_main as config
 
 np.random.seed(SEED)
@@ -103,7 +103,7 @@ def print_wrongest(X, y_true, y_pred, num_wrongest=100, print_them=False, persis
     return wrongest_fps, wrongest_fns
 
 
-def cross_validate(model_class, data, embeddings, n_splits=4, show_wrongest=True):
+def cross_validate(model_class, data, embeddings, n_splits=4, show_wrongest=True, model_config=None,):
     logging.info("Cross validating model {} using {} folds...".format(model_class.__name__, str(n_splits)))
     skf = StratifiedKFold(n_splits=n_splits, shuffle=True)
     models = list()
@@ -111,9 +111,9 @@ def cross_validate(model_class, data, embeddings, n_splits=4, show_wrongest=True
         logging.info("Running Fold {} of {}".format(i + 1, n_splits))
         models.append(None)
         cv_name = model_class.__name__ + '_cv_' + str(i)
-        models[-1] = model_class(data, name=cv_name)
+        models[-1] = model_class(data=data, name=cv_name)
         models[-1].blend_embeddings(embeddings)
-        models[-1].define_model()
+        models[-1].define_model(model_config)
         models[-1].fit(train_indices=train, val_indices=test, curve_file_suffix=str(i))
         if data.custom_features:
             predict_X = [data.train_X[test], data.train_features[test]]
@@ -168,14 +168,13 @@ def main():
     data.preprocessing()
     embeddings = load_embeddings(data, embedding_files)
     save_unknown_words(data, embeddings, max_words=200)
-    # models_all = LSTMModel(data=data)
-    # models_all.blend_embeddings(embeddings)
-    # models_all.define_model()
-    # models_all.fit()
-    # models_all = [models_all]
-    models_lstm_attention_cv = cross_validate(LSTMModelAttention, data, embeddings)
-    # models_cnn_cv = cross_validate(CNNModel, data, embeddings)
-    models_all = models_lstm_attention_cv # + models_cnn_cv
+    models_all = list()
+    for model in config.get('models'):
+        model_class = globals()[model.get('class')]
+        models_all.extend(cross_validate(model_class,
+                                         data,
+                                         embeddings,
+                                         model_config=model.get('args')))
     cleanup_models(models_all)
     ensemble_cv = Ensemble(models_all)
     train_X = [data.train_X]

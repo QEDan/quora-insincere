@@ -1,6 +1,5 @@
-import os
-
 import numpy as np
+import os
 
 from src.generate_config import generate_config
 
@@ -93,7 +92,13 @@ def random_configs():
             # '../input/embeddings/wiki-news-300d-1M/wiki-news-300d-1M.vec',
             '../input/embeddings/paragram_300_sl999/paragram_300_sl999.txt'
         ],
-        'dev_size': None
+        'dev_size': None,
+        'models': [{'class': 'LSTMModelAttention',
+                   'args': None
+                    },
+                   {'class': 'CNNModel',
+                    'args': None}
+                   ]
     }
 
     return random_state, config_data, config_insincere_model, \
@@ -102,12 +107,24 @@ def random_configs():
 
 if __name__ == "__main__":
     search_size = 10
-    for i in range(search_size):
-        random_state, config_data, config_insincere_model, \
-            config_lrfinder, config_one_cycle, config_main \
-            = random_configs()
-        generate_config(random_state, config_data, config_insincere_model,
-                        config_lrfinder, config_one_cycle, config_main)
-        print('launching configuration number {}'.format(str(i)))
-        os.system('./generate_script.sh')
-        os.system('kaggle kernels push')
+    config_list = [[{'class': 'LSTMModelAttention',
+                     'args': None}
+                    ],
+                    [{'class': 'LSTMModelAttention',
+                     'args': None
+                    },
+                    {'class': 'CNNModel',
+                     'args': None
+                    }
+                  ]]
+    for models in config_list:
+        for i in range(search_size):
+            random_state, config_data, config_insincere_model, \
+                config_lrfinder, config_one_cycle, config_main \
+                = random_configs()
+            config_main['models'] = models
+            generate_config(random_state, config_data, config_insincere_model,
+                            config_lrfinder, config_one_cycle, config_main)
+            print('launching configuration number {}'.format(str(i)))
+            os.system('./generate_script.sh')
+            os.system('kaggle kernels push')
