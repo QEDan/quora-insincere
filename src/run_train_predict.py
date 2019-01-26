@@ -175,9 +175,6 @@ def main():
                                          data,
                                          embeddings,
                                          model_config=model.get('args')))
-    models_lstm_attention_cv = cross_validate(LSTMModelAttention, data, embeddings)
-    models_cnn_cv = cross_validate(CNNModel, data, embeddings)
-    models_all = models_lstm_attention_cv  + models_cnn_cv
     cleanup_models(models_all)
     ensemble_cv = Ensemble(models_all)
     train_X = [data.train_X]
