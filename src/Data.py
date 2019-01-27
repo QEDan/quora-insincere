@@ -1,14 +1,99 @@
-import logging
-import numpy as np
-import pandas as pd
-import re
 from keras.preprocessing.sequence import pad_sequences
 from keras.preprocessing.text import Tokenizer
 from nltk.corpus import stopwords
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
+from text_cleaning import clean_contractions, clean_specials, clean_spelling, clean_acronyms, clean_non_dictionary,\
+    clean_numbers
+from collections import defaultdict
+from config import config_data, random_state
 
-from src.config import config_data, random_state
+import logging
+import numpy as np
+import pandas as pd
+import re
+import spacy
+
+pd.options.display.max_colwidth = -1
+pd.options.display.max_columns = 10
+
+
+class DataV2:
+    """ Loads and preprocesses data """
+
+    def __init__(self, train_path="../input/train.csv", test_path="../input/test.csv",
+                 text_col='comment_text', id_col='id'):
+        self.config = config_data
+
+        self.text_col = text_col
+        self.id_col = id_col
+
+        self.train_df = pd.read_csv(train_path)
+        self.test_df = pd.read_csv(test_path)
+
+        self.train_df['preprocessed_text'] = self.preprocessing(self.train_df['question_text'])
+        self.test_df['preprocessed_text'] = self.preprocessing(self.test_df['question_text'])
+
+    def preprocessing(self, questions):
+
+        questions = questions.fillna("_na_")
+        preprocess_config = self.config.get('preprocess')
+        case_sensitive = not preprocess_config.get('lower_case')
+        if preprocess_config.get('lower_case'):
+            questions = questions.str.lower()
+        # trouble removing stop words before we have tokenized the text, this has to happen later
+        # if preprocess_config.get('remove_stop_words'):
+            # questions = questions.apply(remove_stops)
+        if preprocess_config.get('remove_contractions'):
+            questions = questions.apply(lambda x: clean_contractions(x))
+        if preprocess_config.get('remove_specials'):
+            questions = questions.apply(lambda x: clean_specials(x))
+        if preprocess_config.get('correct_spelling'):
+            questions = questions.apply(lambda x: clean_spelling(x, case_sensitive=case_sensitive))
+        if preprocess_config.get('replace_acronyms'):
+            questions = questions.apply(lambda x: clean_acronyms(x, case_sensitive=case_sensitive))
+        if preprocess_config.get('replace_non_words'):
+            questions = questions.apply(lambda x: clean_non_dictionary(x, case_sensitive=case_sensitive))
+        if preprocess_config.get('replace_numbers'):
+            questions = questions.apply(lambda x: clean_numbers(x))
+        return questions
+
+    def get_comments(self, subset='train'):
+        if subset == 'train':
+            data = list(self.train_df[self.text_col])
+        if subset == 'test':
+            data = list(self.test_df[self.text_col])
+        if subset == 'all':
+            data = list(self.train_df[self.text_col]) + list(self.test_df[self.text_col])
+        return data
+
+    def get_training_labels(self):
+        labels_columns = self.train_df.columns.difference([self.text_col, self.id_col])
+        labels = self.train_df.loc[:, labels_columns].values
+        return labels
+
+
+class CorpusInfo:
+    """ Calculates corpus information to be referenced during feature engineering later """
+    # todo: pass in a general tokenizer (so that it matches the tokenizer in the rest of the pipeline)
+    def __init__(self, questions, tokenizer=None, lower_case=False):
+        self.word_counts = defaultdict(int)
+        self.sentence_lengths = []
+        self.word_lengths = []
+        self.lower_case = lower_case
+        self.calc_corpus_info(questions)
+
+    def calc_corpus_info(self, questions):
+        nlp = spacy.load('en', disable=['parser', 'tagger', 'ner'])
+        for question in questions:
+            if self.lower_case:
+                question = question.lower()
+            tokenized_question = nlp(question)
+            self.sentence_lengths.append(len(tokenized_question))
+            for token in question:
+                text = token.text
+                self.word_lengths.append(len(text))
+                self.word_counts[text] += 1
 
 
 class Data:
