@@ -1,4 +1,8 @@
 import logging
+import matplotlib
+from pprint import pprint
+
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 import os
@@ -12,7 +16,7 @@ from sklearn.model_selection import StratifiedKFold
 from src.Data import Data
 from src.Embedding import Embedding
 from src.Ensemble import Ensemble
-from src.Models import *  # Make all models available for easy script generation
+from src.Models import *  # Make all models available for easy script generation.
 from src.config import random_state as SEED, config_main as config
 
 np.random.seed(SEED)
@@ -25,7 +29,7 @@ def find_best_threshold(y_proba, y_true, plot=False):
     logging.info("Finding best threshold...")
     precision, recall, thresholds = precision_recall_curve(y_true, y_proba)
     thresholds = np.append(thresholds, 1.001)
-    F = 2 / (1/precision + 1/recall)
+    F = 2.0 / (1.0/precision + 1.0/recall)
     best_score = np.max(F)
     best_th = thresholds[np.argmax(F)]
     logging.info("Best score = {}. Best threshold = {}".format(best_score, best_th))
@@ -159,6 +163,19 @@ def cleanup_models(models):
     for m in models:
         m.cleanup()
 
+def save_configs():
+    from src.config import random_state, \
+        config_data, \
+        config_insincere_model, \
+        config_lrfinder, \
+        config_one_cycle, \
+        config_main
+    config_dict = locals().copy()
+    with open('configs.txt', 'wt') as f:
+        pprint(config_dict, stream=f)
+    logging.info('Configurations: ')
+    logging.info(pprint(config_dict))
+
 
 def main():
     embedding_files = config.get('embedding_files')
@@ -198,5 +215,6 @@ if __name__ == "__main__":
         format='%(asctime)s %(levelname)-8s %(message)s',
         level=logging.DEBUG,
         datefmt='%Y-%m-%d %H:%M:%S')
+    save_configs()
     main()
     logging.info("Done!")
