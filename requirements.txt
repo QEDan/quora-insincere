@@ -9,7 +9,9 @@ numpy
 pandas
 scikit-learn
 scipy
+spacy
 stickytape
 tensorboard
 tensorflow-gpu
+
 
