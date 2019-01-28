@@ -7,7 +7,9 @@ from text_cleaning import clean_contractions, clean_specials, clean_spelling, cl
     clean_numbers
 from collections import defaultdict
 from config import config_data, random_state
+from data_mappers import TextMapper
 
+import matplotlib.pyplot as plt
 import logging
 import numpy as np
 import pandas as pd
@@ -22,8 +24,7 @@ class DataV2:
     """ Loads and preprocesses data """
 
     def __init__(self, train_path="../input/train.csv", test_path="../input/test.csv",
-                 text_col='comment_text', id_col='id'):
-        self.config = config_data
+                 text_col='question_text', id_col='qid'):
 
         self.text_col = text_col
         self.id_col = id_col
@@ -31,13 +32,14 @@ class DataV2:
         self.train_df = pd.read_csv(train_path)
         self.test_df = pd.read_csv(test_path)
 
-        self.train_df['preprocessed_text'] = self.preprocessing(self.train_df['question_text'])
-        self.test_df['preprocessed_text'] = self.preprocessing(self.test_df['question_text'])
+        # self.train_df['preprocessed_text'] = self.preprocessing(self.train_df['question_text'])
+        # self.test_df['preprocessed_text'] = self.preprocessing(self.test_df['question_text'])
 
-    def preprocessing(self, questions):
+    @staticmethod
+    def preprocessing(questions):
 
         questions = questions.fillna("_na_")
-        preprocess_config = self.config.get('preprocess')
+        preprocess_config = config_data.get('preprocess')
         case_sensitive = not preprocess_config.get('lower_case')
         if preprocess_config.get('lower_case'):
             questions = questions.str.lower()
@@ -59,6 +61,7 @@ class DataV2:
         return questions
 
     def get_comments(self, subset='train'):
+        # todo: add functionality to only get data with a certain label
         if subset == 'train':
             data = list(self.train_df[self.text_col])
         if subset == 'test':
@@ -76,24 +79,82 @@ class DataV2:
 class CorpusInfo:
     """ Calculates corpus information to be referenced during feature engineering later """
     # todo: pass in a general tokenizer (so that it matches the tokenizer in the rest of the pipeline)
-    def __init__(self, questions, tokenizer=None, lower_case=False):
-        self.word_counts = defaultdict(int)
-        self.sentence_lengths = []
+    # todo: how can we make this run faster?
+    # todo: find additional information about characters? - will this take too long?
+    def __init__(self, questions, nlp, word_lowercase=True, char_lowercase=False):
+        self.nlp = nlp
+        self.word_lowercase = word_lowercase
+        self.char_lowercase = char_lowercase
+
+        self.word_counts = []
+        self.char_counts = []
+        self.sent_lengths = []
         self.word_lengths = []
-        self.lower_case = lower_case
+
         self.calc_corpus_info(questions)
 
     def calc_corpus_info(self, questions):
-        nlp = spacy.load('en', disable=['parser', 'tagger', 'ner'])
+        word_counters = defaultdict(int)
+        char_counters = defaultdict(int)
+
         for question in questions:
-            if self.lower_case:
-                question = question.lower()
-            tokenized_question = nlp(question)
-            self.sentence_lengths.append(len(tokenized_question))
-            for token in question:
+            tokenized_question = self.nlp(question)
+            self.sent_lengths.append(len(tokenized_question))
+            for token in tokenized_question:
                 text = token.text
                 self.word_lengths.append(len(text))
-                self.word_counts[text] += 1
+                word_to_count = text.lower() if self.word_lowercase else text
+                word_counters[word_to_count] += 1
+                for char in text:
+                    char_to_count = char.lower() if self.char_lowercase else char
+                    char_counters[char_to_count] += 1
+
+        self.word_counts = sorted(word_counters.items(), key=lambda x: x[1], reverse=True)
+        self.char_counts = sorted(char_counters.items(), key=lambda x: x[1], reverse=True)
+
+    def plot_word_lengths(self, max_len):
+        plt.hist(self.word_lengths, bins=np.arange(0, max_len, 2), cumulative=True, normed=1)
+        plt.hlines(0.975, 0, 30, colors='red')
+
+    def plot_sent_lengths(self, max_len):
+        plt.hist(self.sent_lengths, bins=np.arange(0, max_len, 2), cumulative=True, normed=1)
+        plt.hlines(0.975, 0, 30, colors='red')
+
+
+# nlp = spacy.load('en', disable=['parser', 'tagger', 'ner'])
+# data = DataV2()
+# corpus_info = CorpusInfo(questions=data.get_comments(), nlp=nlp)
+#
+# plt.hist(corpus_info.word_lengths, bins=np.arange(0, 30, 2), cumulative=True, normed=1)
+# plt.hlines(0.975, 0, 30, colors='red')
+#
+# word_counts = corpus_info.word_counts
+# char_counts = corpus_info.char_counts
+#
+# text_mapper = TextMapper(word_counts=word_counts, char_counts=char_counts, max_word_len=4, max_sent_len=10, nlp=nlp,
+#                          word_lowercase=True, char_lowercase=False)
+#
+# sample_question = data.train_df.sample()['question_text'].values[0]
+#
+#
+# def test_data_mapping(text_mapper, data):
+#
+#     sample_question = data.train_df.sample()['question_text'].values[0]
+#     print("Sample Question:\n{}".format(sample_question))
+#     x = text_mapper.text_to_x(sample_question)
+#     words_input, chars_input = x['words_input'], x['chars_input']
+#
+#     print("word_x rep:\n{}".format(words_input))
+#     print("char_x rep:\n{}".format(chars_input))
+#
+#     words_x_to_text = text_mapper.x_to_words(words_input)
+#     chars_x_to_text = text_mapper.x_to_chars(chars_input)
+#
+#     print("word_x_to_text:\n{}".format(words_x_to_text))
+#     print("char_x_to_text:\n{}".format(chars_x_to_text))
+#
+#
+# test_data_mapping(text_mapper, data)
 
 
 class Data:
