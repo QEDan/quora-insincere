@@ -8,6 +8,7 @@ from text_cleaning import clean_contractions, clean_specials, clean_spelling, cl
 from collections import defaultdict
 from config import config_data, random_state
 from data_mappers import TextMapper
+from data_generator import DataGenerator
 
 import matplotlib.pyplot as plt
 import logging
@@ -24,10 +25,11 @@ class DataV2:
     """ Loads and preprocesses data """
 
     def __init__(self, train_path="../input/train.csv", test_path="../input/test.csv",
-                 text_col='question_text', id_col='qid'):
+                 text_col='question_text', id_col='qid', label_col='target'):
 
         self.text_col = text_col
         self.id_col = id_col
+        self.label_col = label_col
 
         self.train_df = pd.read_csv(train_path)
         self.test_df = pd.read_csv(test_path)
@@ -71,16 +73,21 @@ class DataV2:
         return data
 
     def get_training_labels(self):
-        labels_columns = self.train_df.columns.difference([self.text_col, self.id_col])
-        labels = self.train_df.loc[:, labels_columns].values
+        labels = self.train_df.loc[:, self.label_col].values
         return labels
+
+    def get_training_split(self, seed=0):
+        train_qs, val_qs, train_labels, val_labels = train_test_split(self.train_df[self.text_col].tolist(),
+                                                                      self.train_df[self.label_col].tolist(),
+                                                                      stratify=self.train_df[self.label_col].tolist(),
+                                                                      random_state=seed)
+        return train_qs, val_qs, train_labels, val_labels
 
 
 class CorpusInfo:
     """ Calculates corpus information to be referenced during feature engineering later """
     # todo: pass in a general tokenizer (so that it matches the tokenizer in the rest of the pipeline)
-    # todo: how can we make this run faster?
-    # todo: find additional information about characters? - will this take too long?
+    # todo: how can we make this run faster? can be parallelized...?
     def __init__(self, questions, nlp, word_lowercase=True, char_lowercase=False):
         self.nlp = nlp
         self.word_lowercase = word_lowercase
@@ -121,40 +128,42 @@ class CorpusInfo:
         plt.hlines(0.975, 0, 30, colors='red')
 
 
-# nlp = spacy.load('en', disable=['parser', 'tagger', 'ner'])
-# data = DataV2()
-# corpus_info = CorpusInfo(questions=data.get_comments(), nlp=nlp)
-#
-# plt.hist(corpus_info.word_lengths, bins=np.arange(0, 30, 2), cumulative=True, normed=1)
-# plt.hlines(0.975, 0, 30, colors='red')
-#
-# word_counts = corpus_info.word_counts
-# char_counts = corpus_info.char_counts
-#
-# text_mapper = TextMapper(word_counts=word_counts, char_counts=char_counts, max_word_len=4, max_sent_len=10, nlp=nlp,
-#                          word_lowercase=True, char_lowercase=False)
-#
-# sample_question = data.train_df.sample()['question_text'].values[0]
-#
-#
-# def test_data_mapping(text_mapper, data):
-#
-#     sample_question = data.train_df.sample()['question_text'].values[0]
-#     print("Sample Question:\n{}".format(sample_question))
-#     x = text_mapper.text_to_x(sample_question)
-#     words_input, chars_input = x['words_input'], x['chars_input']
-#
-#     print("word_x rep:\n{}".format(words_input))
-#     print("char_x rep:\n{}".format(chars_input))
-#
-#     words_x_to_text = text_mapper.x_to_words(words_input)
-#     chars_x_to_text = text_mapper.x_to_chars(chars_input)
-#
-#     print("word_x_to_text:\n{}".format(words_x_to_text))
-#     print("char_x_to_text:\n{}".format(chars_x_to_text))
-#
-#
-# test_data_mapping(text_mapper, data)
+nlp = spacy.load('en', disable=['parser', 'tagger', 'ner'])
+data = DataV2()
+
+train_qs, val_qs, train_labels, val_labels = data.get_training_split()
+
+corpus_info = CorpusInfo(questions=data.get_comments()[:10000], nlp=nlp)
+
+word_counts = corpus_info.word_counts
+char_counts = corpus_info.char_counts
+
+text_mapper = TextMapper(word_counts=word_counts, char_counts=char_counts, word_threshold=10, max_word_len=20,
+                         char_threshold=350, max_sent_len=100, nlp=nlp, word_lowercase=True, char_lowercase=True)
+
+sample_question = data.train_df.sample()['question_text'].values[0]
+
+b = DataGenerator(train_qs, train_labels, text_mapper)
+
+out = b[0]
+
+def test_data_mapping(text_mapper, data):
+
+    sample_question = data.train_df.sample()['question_text'].values[0]
+    print("Sample Question:\n{}".format(sample_question))
+    words_input, chars_input = text_mapper.text_to_x(sample_question)
+
+    print("word_x rep:\n{}".format(words_input))
+    print("char_x rep:\n{}".format(chars_input))
+
+    words_x_to_text = text_mapper.x_to_words(words_input)
+    chars_x_to_text = text_mapper.x_to_chars(chars_input)
+
+    print("word_x_to_text:\n{}".format(words_x_to_text))
+    print("char_x_to_text:\n{}".format(chars_x_to_text))
+
+
+test_data_mapping(text_mapper, data)
 
 
 class Data:

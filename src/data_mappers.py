@@ -36,7 +36,7 @@ class TextMapper:
             for char_ind, char in enumerate(word[:self.max_word_len]):
                 chars_x[word_ind][char_ind] = self.char_mapper.get_symbol_index(char)
 
-        return {'words_input': words_x, 'chars_input': chars_x}
+        return words_x, chars_x
 
     def x_to_words(self, words_x, remove_padding=True):
         words = [self.word_mapper.ix_to_symbol[int(i)] for i in words_x]
@@ -65,9 +65,10 @@ class TextMapper:
 
         return question_chars
 
-    def get_texts_x(self, texts):
-        x_rep = np.array([self.text_to_x(text) for text in texts])
-        return x_rep
+    def texts_to_x(self, texts):
+        inputs_x = [self.text_to_x(text) for text in texts]
+        words_input, chars_input = map(np.array, zip(*inputs_x))
+        return {"words_input": words_input, "chars_input": chars_input}
 
     def set_max_sentence_len(self, max_sent_len):
         self.word_mapper.set_max_len(max_sent_len)
@@ -95,7 +96,7 @@ class SymbolMapper:
 
     def init_mappings(self, check_coverage=True):
         symbol_counts = sorted(self.symbol_counts, key=lambda x: x[1], reverse=True)
-        vocab = [symbol for symbol, count in symbol_counts if count > self.threshold]
+        vocab = [symbol for symbol, count in symbol_counts if count >= self.threshold]
         vocab = self.BASE_ALPHABET + vocab
 
         self.symbol_to_ix = {symbol: ix for ix, symbol in enumerate(vocab)}
@@ -111,6 +112,12 @@ class SymbolMapper:
     def set_max_len(self, max_len):
         self.max_len = max_len
 
+    def print_top_n_symbols(self, n=10):
+        print([(symbol, count) for symbol, count in self.symbol_counts if count >= self.threshold][:n])
+
+    def print_bot_n_symbols(self, n=10):
+        print([(symbol, count) for symbol, count in self.symbol_counts if count >= self.threshold][-n:])
+
     def get_symbol_index(self, symbol):
         if self.lowercase:
             symbol = symbol.lower()
@@ -124,10 +131,11 @@ class SymbolMapper:
         """
         Simple metric on coverage of symbols
 
-        :param symbols_name: str, printed to distinguish word mappers from char mappers
+        :param symbols_name: str, printed to distinguish different mappers
         """
         symbol_mappings = self.symbol_to_ix.keys()
         print("Number of unique {}: {}".format(symbols_name, len(self.symbol_counts)))
+        print("Number of unique {} mapped: {}".format(symbols_name, len(symbol_mappings)))
         total_tokens = 0
         mapped_tokens = 0
         for symbol, count in self.symbol_counts:

@@ -9,13 +9,12 @@ from gensim.models import KeyedVectors
 
 
 class Embedding:
-    def __init__(self, data):
+    def __init__(self, word_counts):
         self.embeddings_index = None
         self.nb_words = None
-        self.embeddings_index = None
         self.embed_size = None
         self.embedding_matrix = None
-        self.data = data
+        self.word_counts = word_counts
         self.name = None
 
     def load(self, embedding_file='../input/embeddings/glove.840B.300d/glove.840B.300d.txt'):
@@ -24,6 +23,7 @@ class Embedding:
 
         def get_coefs(word, *arr):
             return word, np.asarray(arr, dtype='float32')
+
         if "wiki-news" in embedding_file:
             self.embeddings_index = dict(get_coefs(*o.split(" "))
                                          for i, o in enumerate(open(embedding_file)) if len(o) > 100)
@@ -44,6 +44,7 @@ class Embedding:
 
         try:
             all_embs = np.stack(self.embeddings_index.values())
+
         except ValueError as e:
             logging.error(e)
             tb = traceback.format_exc()
@@ -55,18 +56,19 @@ class Embedding:
             logging.debug("first few self.embeddings_index.values(): "
                           + str(list(self.embeddings_index.values())[:5]))
             raise
+
         emb_mean, emb_std = all_embs.mean(), all_embs.std()
         self.embed_size = all_embs.shape[1]
 
-        word_index = self.data.tokenizer.word_index
-        self.nb_words = min(self.data.max_feature, len(word_index))
+        self.nb_words = len(self.word_counts)
         self.embedding_matrix = np.random.normal(emb_mean, emb_std, (self.nb_words, self.embed_size))
-        for word, i in word_index.items():
-            if i >= self.nb_words:
-                continue
+        for ind, (word, count) in enumerate(self.word_counts):
+            # todo: freezing pre-trained embeddings and unfreezing these unknown, random word embeddings
             embedding_vector = self.embeddings_index.get(word)
             if embedding_vector is not None:
-                self.embedding_matrix[i] = embedding_vector
+                self.embedding_matrix[ind] = embedding_vector
+
+    def get_embedding_matrix(self):
         return self.embedding_matrix
 
     def check_coverage(self, vocab):

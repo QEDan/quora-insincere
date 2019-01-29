@@ -4,7 +4,7 @@ from keras.layers import Dense, Input, Embedding as EmbeddingLayer, Dropout
 from keras.models import Model
 
 from src.Attention import Attention
-from src.InsincereModel import InsincereModel
+from src.InsincereModel import InsincereModel, InsincereModelV2
 
 
 class LSTMModel(InsincereModel):
@@ -110,3 +110,36 @@ class CNNModel(InsincereModel):
                   'dropout_rate': 0.1,
                   'dense_size': 32}
         return config
+
+class BiLSTMCharCNNModel(InsincereModelV2):
+    def define_model(self, model_config=None):
+        if model_config is None:
+            model_config = self.default_config()
+        filter_sizes = model_config['filter_sizes']
+        num_filters = model_config['num_filters']
+
+        inputs = []
+        char_inputs =
+        inp = Input(shape=(self.data.maxlen,))
+        x = EmbeddingLayer(self.embedding.nb_words, self.embedding.embed_size,
+                           weights=[self.embedding.embedding_matrix])(inp)
+        x = Reshape((self.data.maxlen, self.embedding.embed_size, 1))(x)
+        maxpool_pool = []
+        inputs = [inp]
+        for i in range(len(filter_sizes)):
+            conv = Conv2D(num_filters, kernel_size=(filter_sizes[i], self.embedding.embed_size),
+                          kernel_initializer='he_normal', activation='elu')(x)
+            maxpool_pool.append(MaxPool2D(pool_size=(self.data.maxlen - filter_sizes[i] + 1, 1))(conv))
+        z = Concatenate(axis=1)(maxpool_pool)
+        z = Flatten()(z)
+        z = Dropout(model_config['dropout_rate'])(z)
+        if self.data.custom_features:
+            inp_features = Input(shape=(len(self.data.custom_features),))
+            z = concatenate([z, inp_features])
+            z = Dense(model_config['dense_size'], activation='relu')(z)
+            inputs += [inp_features]
+        outp = Dense(1, activation="sigmoid")(z)
+        self.model = Model(inputs=inputs, outputs=outp)
+        self.model.compile(loss=self.loss, optimizer='sgd', metrics=['accuracy', self.f1_score])
+
+        return self.model
