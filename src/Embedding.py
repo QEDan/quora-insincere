@@ -5,7 +5,7 @@ import logging
 import numpy as np
 import operator
 import traceback
-from gensim.models import KeyedVectors
+# from gensim.models import KeyedVectors
 
 
 class Embedding:
@@ -33,12 +33,12 @@ class Embedding:
             self.embeddings_index = dict(get_coefs(*o.split(" ")) for i, o in
                                          enumerate(open(embedding_file, encoding="utf8", errors='ignore'))
                                          if len(o) > 100)
-        elif "GoogleNews" in embedding_file:
-            self.embeddings_index = {}
-            wv_from_bin = KeyedVectors.load_word2vec_format(embedding_file, binary=True)
-            for i, (word, vector) in enumerate(zip(wv_from_bin.vocab, wv_from_bin.vectors)):
-                coefs = np.asarray(vector, dtype='float32')
-                self.embeddings_index[word] = coefs
+        # elif "GoogleNews" in embedding_file:
+        #     self.embeddings_index = {}
+        #     wv_from_bin = KeyedVectors.load_word2vec_format(embedding_file, binary=True)
+        #     for i, (word, vector) in enumerate(zip(wv_from_bin.vocab, wv_from_bin.vectors)):
+        #         coefs = np.asarray(vector, dtype='float32')
+        #         self.embeddings_index[word] = coefs
         else:
             raise ValueError("Unsupported embedding file: " + embedding_file)
 

@@ -62,7 +62,7 @@ class DataV2:
             questions = questions.apply(lambda x: clean_numbers(x))
         return questions
 
-    def get_comments(self, subset='train'):
+    def get_questions(self, subset='train'):
         # todo: add functionality to only get data with a certain label
         if subset == 'train':
             data = list(self.train_df[self.text_col])
@@ -128,42 +128,42 @@ class CorpusInfo:
         plt.hlines(0.975, 0, 30, colors='red')
 
 
-nlp = spacy.load('en', disable=['parser', 'tagger', 'ner'])
-data = DataV2()
-
-train_qs, val_qs, train_labels, val_labels = data.get_training_split()
-
-corpus_info = CorpusInfo(questions=data.get_comments()[:10000], nlp=nlp)
-
-word_counts = corpus_info.word_counts
-char_counts = corpus_info.char_counts
-
-text_mapper = TextMapper(word_counts=word_counts, char_counts=char_counts, word_threshold=10, max_word_len=20,
-                         char_threshold=350, max_sent_len=100, nlp=nlp, word_lowercase=True, char_lowercase=True)
-
-sample_question = data.train_df.sample()['question_text'].values[0]
-
-b = DataGenerator(train_qs, train_labels, text_mapper)
-
-out = b[0]
-
-def test_data_mapping(text_mapper, data):
-
-    sample_question = data.train_df.sample()['question_text'].values[0]
-    print("Sample Question:\n{}".format(sample_question))
-    words_input, chars_input = text_mapper.text_to_x(sample_question)
-
-    print("word_x rep:\n{}".format(words_input))
-    print("char_x rep:\n{}".format(chars_input))
-
-    words_x_to_text = text_mapper.x_to_words(words_input)
-    chars_x_to_text = text_mapper.x_to_chars(chars_input)
-
-    print("word_x_to_text:\n{}".format(words_x_to_text))
-    print("char_x_to_text:\n{}".format(chars_x_to_text))
-
-
-test_data_mapping(text_mapper, data)
+# nlp = spacy.load('en_core_web_sm', disable=['parser', 'tagger', 'ner'])
+# data = DataV2()
+#
+# train_qs, val_qs, train_labels, val_labels = data.get_training_split()
+#
+# corpus_info = CorpusInfo(questions=data.get_questions()[:10000], nlp=nlp)
+#
+# word_counts = corpus_info.word_counts
+# char_counts = corpus_info.char_counts
+#
+# text_mapper = TextMapper(word_counts=word_counts, char_counts=char_counts, word_threshold=10, max_word_len=20,
+#                          char_threshold=350, max_sent_len=100, nlp=nlp, word_lowercase=True, char_lowercase=True)
+#
+# sample_question = data.train_df.sample()['question_text'].values[0]
+#
+# b = DataGenerator(train_qs, train_labels, text_mapper)
+#
+# out = b[0]
+#
+# def test_data_mapping(text_mapper, data):
+#
+#     sample_question = data.train_df.sample()['question_text'].values[0]
+#     print("Sample Question:\n{}".format(sample_question))
+#     words_input, chars_input = text_mapper.text_to_x(sample_question)
+#
+#     print("word_x rep:\n{}".format(words_input))
+#     print("char_x rep:\n{}".format(chars_input))
+#
+#     words_x_to_text = text_mapper.x_to_words(words_input)
+#     chars_x_to_text = text_mapper.x_to_chars(chars_input)
+#
+#     print("word_x_to_text:\n{}".format(words_x_to_text))
+#     print("char_x_to_text:\n{}".format(chars_x_to_text))
+#
+#
+# test_data_mapping(text_mapper, data)
 
 
 class Data:

@@ -9,15 +9,18 @@ import os
 import pandas as pd
 import random
 import tensorflow as tf
+import spacy
+
 from sklearn import metrics
 from sklearn.metrics import precision_recall_curve
 from sklearn.model_selection import StratifiedKFold
 
-from src.Data import Data
-from src.Embedding import Embedding
-from src.Ensemble import Ensemble
-from src.Models import *  # Make all models available for easy script generation.
-from src.config import random_state as SEED, config_main as config
+from Data import Data, DataV2, CorpusInfo
+from data_mappers import TextMapper
+from Embedding import Embedding
+from Ensemble import Ensemble
+from Models import *  # Make all models available for easy script generation.
+from config import random_state as SEED, config_main as config
 
 np.random.seed(SEED)
 tf.set_random_seed(SEED)
@@ -180,10 +183,17 @@ def save_configs():
 def main():
     embedding_files = config.get('embedding_files')
     dev_size = config.get('dev_size')
-    data = Data()
-    data.load(dev_size=dev_size)
-    data.preprocessing()
-    embeddings = load_embeddings(data, embedding_files)
+    data = DataV2()
+
+    nlp = spacy.load('en_core_web_sm', disable=['parser', 'tagger', 'ner'])
+    corpus_info = CorpusInfo(data.get_questions(subset='train'), nlp)
+    word_counts = corpus_info.word_counts
+    char_counts = corpus_info.char_counts
+
+    text_mapper = TextMapper(word_counts=word_counts, char_counts=char_counts, word_threshold=10, max_word_len=20,
+                             char_threshold=350, max_sent_len=100, nlp=nlp, word_lowercase=True, char_lowercase=True)
+
+    embeddings = load_embeddings(word_counts, embedding_files)
     save_unknown_words(data, embeddings, max_words=200)
     models_all = list()
     for model in config.get('models'):

@@ -4,7 +4,7 @@ import os
 import warnings
 from keras.callbacks import Callback
 
-from src.config import config_lrfinder as config
+from config import config_lrfinder as config
 
 
 class LRFinder(Callback):

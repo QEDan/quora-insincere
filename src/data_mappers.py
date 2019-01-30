@@ -4,8 +4,8 @@ import numpy as np
 class TextMapper:
     """ Maps text into model input x """
 
-    def __init__(self, word_counts, char_counts, nlp, max_sent_len=400, word_threshold=1, word_lowercase=False,
-                 max_word_len=20, char_threshold=5, char_lowercase=False):
+    def __init__(self, word_counts, char_counts, nlp, max_sent_len=100, word_threshold=10, word_lowercase=False,
+                 max_word_len=12, char_threshold=5, char_lowercase=False):
         """
         :param word_counts: list of tuples of (word, count)
         :param nlp: from pre-loaded spaCy
@@ -13,7 +13,8 @@ class TextMapper:
         :param word_threshold: number of times a word must appear in word_counts for it to get a representation
         :param word_lowercase: boolean, whether words should be lowercased
         """
-
+        self.max_sent_len = max_sent_len
+        self.max_word_len = max_word_len
         self.word_mapper = WordMapper(word_counts=word_counts, threshold=word_threshold, max_sent_len=max_sent_len,
                                       word_lowercase=word_lowercase)
         self.char_mapper = CharMapper(char_counts=char_counts, threshold=char_threshold, max_word_len=max_word_len,
@@ -68,7 +69,8 @@ class TextMapper:
     def texts_to_x(self, texts):
         inputs_x = [self.text_to_x(text) for text in texts]
         words_input, chars_input = map(np.array, zip(*inputs_x))
-        return {"words_input": words_input, "chars_input": chars_input}
+        return words_input
+        # return {"words_input": words_input, "chars_input": chars_input}
 
     def set_max_sentence_len(self, max_sent_len):
         self.word_mapper.set_max_len(max_sent_len)
@@ -126,6 +128,9 @@ class SymbolMapper:
         except KeyError:
             num = self.symbol_to_ix[self.UNKNOWN_SYMBOL]
         return num
+
+    def get_vocab_len(self):
+        return len(self.symbol_to_ix)
 
     def print_coverage_statistics(self, symbols_name='symbol'):
         """

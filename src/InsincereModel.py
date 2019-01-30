@@ -4,11 +4,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 from keras.callbacks import ModelCheckpoint, EarlyStopping
 
-from src.data_generator import DataGenerator
-from src.Embedding import Embedding
-from src.LRFinder import LRFinder
-from src.OneCycleLR import OneCycleLR
-from src.config import config_insincere_model
+from data_generator import DataGenerator
+from Embedding import Embedding
+from LRFinder import LRFinder
+from OneCycleLR import OneCycleLR
+from config import config_insincere_model
 
 
 class InsincereModel:
@@ -170,9 +170,10 @@ class InsincereModel:
 
 
 class InsincereModelV2:
-    def __init__(self, data, corpus_info, name=None, loss='binary_crossentropy'):
+    def __init__(self, data, corpus_info, text_mapper, name=None, loss='binary_crossentropy'):
         self.data = data
         self.corpus_info = corpus_info
+        self.text_mapper = text_mapper
         self.name = name
         self.embedding = None
         self.model = None
