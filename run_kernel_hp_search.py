@@ -7,7 +7,7 @@ from src.generate_config import generate_config
 def random_config_data():
     max_feature = np.random.choice([50000, 100000, 120000, 200000])
     max_seq_len = np.random.choice([50, 75, 100, 200])
-    config_data = {'preprocess': {'lower_case': False,
+    config_data = {'preprocess': {'lower_case': True,
                                   'remove_stop_words': False,
                                   'remove_contractions': True,
                                   'remove_specials': True,
@@ -89,8 +89,8 @@ def random_configs():
     config_main = {
         'embedding_files': [  # '../input/embeddings/GoogleNews-vectors-negative300/GoogleNews-vectors-negative300.bin',
             '../input/embeddings/glove.840B.300d/glove.840B.300d.txt',
-            # '../input/embeddings/wiki-news-300d-1M/wiki-news-300d-1M.vec',
-            '../input/embeddings/paragram_300_sl999/paragram_300_sl999.txt'
+            '../input/embeddings/wiki-news-300d-1M/wiki-news-300d-1M.vec',
+            # '../input/embeddings/paragram_300_sl999/paragram_300_sl999.txt'
         ],
         'dev_size': None,
         'models': [{'class': 'LSTMModelAttention',
@@ -107,16 +107,11 @@ def random_configs():
 
 if __name__ == "__main__":
     search_size = 10
-    config_list = [[{'class': 'LSTMModelAttention',
-                     'args': None}
-                    ],
-                    [{'class': 'LSTMModelAttention',
-                     'args': None
-                    },
-                    {'class': 'CNNModel',
-                     'args': None
-                    }
-                  ]]
+    config_list = [[{'args':
+                         {'dense_size_1': 64, 'dense_size_2': 32,
+                          'dropout_rate': 0.1, 'lstm_size': 128},
+                     'class':
+                         'LSTMModelAttention'}]]
     for models in config_list:
         for i in range(search_size):
             random_state, config_data, config_insincere_model, \

@@ -108,7 +108,7 @@ class Data:
     def tokenize(self):
         logging.info("Tokenizing...")
         max_feature = self.config.get('max_feature')
-        tokenizer = Tokenizer(num_words=max_feature)
+        tokenizer = Tokenizer(num_words=max_feature, oov_token='#OOV#', filters='"()*+,-./:;<=>@[\]^_`{|}~ ')
         tokenizer.fit_on_texts(list(self.train_X))
         self.train_X = tokenizer.texts_to_sequences(self.train_X)
         self.val_X = tokenizer.texts_to_sequences(self.val_X)
@@ -245,7 +245,11 @@ class Data:
                         'iiser': 'indian institute of science education and research',
                         'iisc': 'indian institute of science',
                         'iims': 'indian institutes of management',
-                        'cpec': 'china pakistan economic corridor'
+                        'cpec': 'china pakistan economic corridor',
+                        'sjw': 'social justice warrior',
+                        'SJW': 'social justice warrior',
+                        'sjws': 'social justice warriors',
+                        'SJWs': 'social justice warriors'
 
                         }
         for word in acronym_dict.keys():
@@ -260,23 +264,30 @@ class Data:
     def clean_non_dictionary(text, case_sensitive=False):
         replace_dict = {'quorans': 'users',
                         'quoran': 'user',
+                        'Quoran': 'User',
+                        'Quorans': 'Users',
                         'jio': 'phone manufacturer',
                         'manipal': 'city',
                         'bitsat': 'exam',
                         'mtech': 'technical university',
                         'pilani': 'town',
-                        'bhu': 'university',
+                        ' bhu ': ' university ',
                         'h1b': 'visa',
                         'redmi': 'phone manufacturer',
-                        'nift': 'university',
+                        'Redmi': 'phone manufacturer',
+                        'OnePlus': 'phone manufacturer',
+                        'oneplus': 'phone manufacturer',
+                        'UCEED': 'exam',
+                        'uceed': 'exam',
+                        ' nift ': ' university ',
                         'kvpy': 'exam',
                         'thanos': 'comic villain',
                         'paytm': 'payment system',
                         'comedk': 'medical consortium',
                         'accenture': 'management consulting company',
                         'llb': 'bachelor of laws',
-                        'ignou': 'university',
-                        'dtu': 'university',
+                        ' ignou ': ' university ',
+                        ' dtu ': ' university ',
                         'aadhar': 'social number',
                         'lenovo': 'computer manufacturer',
                         'gmat': 'exam',
@@ -297,23 +308,32 @@ class Data:
                         'wipro': 'information technology company',
                         'articleship': 'internship',
                         'comey': 'law enforcement director',
-                        'jnu': 'university',
+                        ' jnu ': ' university ',
                         'acca': 'chartered accountants',
                         'aakash': 'phone manufacturer',
                         'brexit': 'british succession',
-                        'crypto': 'digital currency',
+                        'Brexit': 'British succession',
+                        'crypto ': 'digital currency',
                         'cryptocurrency': 'digital currency',
                         'cryptocurrencies': 'digital currencies',
                         'etherium': 'digital currency',
+                        'ethereum': 'digital currency',
+                        'Etherium': 'digital currency',
+                        'Ethereum': 'digital currency',
                         'bitcoin': 'digital currency',
+                        'Bitcoin': 'digital currency',
+                        'BitCoin': 'digital currency',
                         'viteee': 'exam',
                         'iocl': 'indian oil company',
                         'nmims': 'management school',
                         'rohingya': 'myanmar people',
-                        'fortnite': 'videogame',
-                        'upes': 'university',
-                        'nsit': 'university',
-                        'coinbase': 'digital currency exchange'
+                        'fortnite': 'video game',
+                        ' upes ': ' university ',
+                        ' nsit ': ' university ',
+                        'coinbase': 'digital currency exchange',
+                        'Coinbase': 'digital currency exchange',
+                        'Blockchain': 'distributed database',
+                        'blockchain': 'distributed database'
                         }
         for word in replace_dict.keys():
             if case_sensitive:

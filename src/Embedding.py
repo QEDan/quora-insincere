@@ -17,6 +17,7 @@ class Embedding:
         self.embedding_matrix = None
         self.data = data
         self.name = None
+        self.lower_case = False
 
     def load(self, embedding_file='../input/embeddings/glove.840B.300d/glove.840B.300d.txt'):
         logging.info("loading embedding : " + embedding_file)
@@ -33,6 +34,7 @@ class Embedding:
             self.embeddings_index = dict(get_coefs(*o.split(" ")) for i, o in
                                          enumerate(open(embedding_file, encoding="utf8", errors='ignore'))
                                          if len(o) > 100)
+            self.lower_case = True
         elif "GoogleNews" in embedding_file:
             self.embeddings_index = {}
             wv_from_bin = KeyedVectors.load_word2vec_format(embedding_file, binary=True)
@@ -62,6 +64,8 @@ class Embedding:
         self.nb_words = min(self.data.max_feature, len(word_index))
         self.embedding_matrix = np.random.normal(emb_mean, emb_std, (self.nb_words, self.embed_size))
         for word, i in word_index.items():
+            if self.lower_case:
+                word = word.lower()
             if i >= self.nb_words:
                 continue
             embedding_vector = self.embeddings_index.get(word)
@@ -75,8 +79,12 @@ class Embedding:
         nb_known_words = 0
         nb_unknown_words = 0
         for word in vocab.keys():
+            if self.lower_case:
+                word_key = word.lower()
+            else:
+                word_key = word
             try:
-                known_words[word] = self.embeddings_index[word]
+                known_words[word] = self.embeddings_index[word_key]
                 nb_known_words += vocab[word]
             except:
                 unknown_words[word] = vocab[word]

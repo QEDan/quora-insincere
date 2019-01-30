@@ -3,10 +3,10 @@
 
 random_state = 2018
 
-config_data = {'max_feature': 200000,
- 'max_seq_len': 50,
+config_data = {'max_feature': 100000,
+ 'max_seq_len': 75,
  'preprocess': {'correct_spelling': True,
-                'lower_case': False,
+                'lower_case': True,
                 'remove_contractions': True,
                 'remove_specials': True,
                 'remove_stop_words': False,
@@ -22,18 +22,18 @@ config_insincere_model = {'callbacks': {'checkpoint': {'mode': 'max',
                               'verbose': True},
                'early_stopping': {'mode': 'max',
                                   'monitor': 'val_f1_score',
-                                  'patience': 2,
+                                  'patience': 3,
                                   'verbose': True}},
- 'fit': {'batch_size': 1536,
+ 'fit': {'batch_size': 2000,
          'epochs': 5,
          'pseudo_labels': False,
          'save_curve': True},
- 'predict': {'batch_size': 2048, 'verbose': True}}
+ 'predict': {'batch_size': 1024, 'verbose': True}}
 
 config_lrfinder = {'loss_smoothing_beta': 0.98,
  'lr_scale': 'exp',
  'maximum_lr': 10.0,
- 'minimum_lr': 1e-06,
+ 'minimum_lr': 0.0001,
  'save_dir': None,
  'stopping_criterion_factor': 4,
  'validation_sample_rate': 5,
@@ -48,7 +48,10 @@ config_one_cycle = {'end_percentage': 0.1,
 
 config_main = {'dev_size': None,
  'embedding_files': ['../input/embeddings/glove.840B.300d/glove.840B.300d.txt',
-                     '../input/embeddings/paragram_300_sl999/paragram_300_sl999.txt'],
- 'models': [{'args': None, 'class': 'LSTMModelAttention'},
-            {'args': None, 'class': 'CNNModel'}]}
+                     '../input/embeddings/wiki-news-300d-1M/wiki-news-300d-1M.vec'],
+ 'models': [{'args': {'dense_size_1': 64,
+                      'dense_size_2': 32,
+                      'dropout_rate': 0.1,
+                      'lstm_size': 128},
+             'class': 'LSTMModelAttention'}]}
 
