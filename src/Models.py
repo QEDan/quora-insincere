@@ -1,5 +1,5 @@
 from keras.layers import Bidirectional, CuDNNLSTM, Reshape, Conv2D, MaxPool2D, \
-    Concatenate, Flatten, GlobalAveragePooling1D, GlobalMaxPooling1D, concatenate
+    Concatenate, Flatten, GlobalAveragePooling1D, GlobalMaxPooling1D, concatenate,Conv1D, MaxPooling1D
 from keras.layers import Dense, Input, Embedding as EmbeddingLayer, Dropout, Conv2D
 from keras.models import Model
 
@@ -129,14 +129,16 @@ class BiLSTMCharCNNModel(InsincereModelV2):
         char_vocab_size = self.text_mapper.char_mapper.get_vocab_len()
 
         # chars_input = Input(shape=(max_sent_len, max_word_len), name='chars_input', dtype='int64')
-        words_input = tf.keras.layers.Input(shape=(max_sent_len, ), name='words_input', dtype='int64')
+        words_input = Input(shape=(max_sent_len, ), name='words_input', dtype='int64')
         inputs = [words_input]
         # chars_embedding = EmbeddingLayer(input_dim=char_vocab_size, output_dim=16, input_length=max_word_len)
-        words_embedding = tf.keras.layers.Embedding(input_dim=word_vocab_size, output_dim=100, input_length=max_sent_len)(words_input)
+        words_embedding = EmbeddingLayer(input_dim=word_vocab_size, output_dim=100, input_length=max_sent_len)(words_input)
 
-        x = tf.keras.layers.Conv1D(filters=64, kernel_size=3, activation='relu')(words_embedding)
-        x = tf.keras.layers.MaxPooling1D(pool_size=3, strides=3)(x)
-        preds = tf.keras.layers.Dense(1, activation='sigmoid')(x)
+        x = Conv1D(filters=64, kernel_size=3, activation='relu')(words_embedding)
+        x = MaxPooling1D(pool_size=3, strides=3)(x)
+        x = Flatten()(x)
+        preds = Dense(1, activation='sigmoid')(x)
+
 
         self.model = Model(inputs=words_input, outputs=preds)
         self.model.compile(loss=self.loss, optimizer='sgd', metrics=['accuracy', self.f1_score])

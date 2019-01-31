@@ -167,7 +167,7 @@ def cleanup_models(models):
         m.cleanup()
 
 def save_configs():
-    from src.config import random_state, \
+    from config import random_state, \
         config_data, \
         config_insincere_model, \
         config_lrfinder, \
