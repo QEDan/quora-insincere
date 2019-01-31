@@ -112,11 +112,16 @@ class CNNModel(InsincereModel):
                   'dense_size': 32}
         return config
 
+
 class BiLSTMCharCNNModel(InsincereModelV2):
 
+    def __init__(self, data, corpus_info, text_mapper):
+        super().__init__(data, corpus_info, text_mapper)
+        self.model = self.define_model()
+
     def define_model(self, model_config=None):
-        if model_config is None:
-            model_config = self.default_config()
+        # if model_config is None:
+        #     model_config = self.default_config()
 
         max_sent_len = self.text_mapper.max_sent_len
         max_word_len = self.text_mapper.max_word_len
@@ -133,7 +138,7 @@ class BiLSTMCharCNNModel(InsincereModelV2):
         x = tf.keras.layers.MaxPooling1D(pool_size=3, strides=3)(x)
         preds = tf.keras.layers.Dense(1, activation='sigmoid')(x)
 
-        self.model = Model(inputs=inputs, outputs=preds)
+        self.model = Model(inputs=words_input, outputs=preds)
         self.model.compile(loss=self.loss, optimizer='sgd', metrics=['accuracy', self.f1_score])
 
         return self.model

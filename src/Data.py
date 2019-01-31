@@ -34,6 +34,11 @@ class DataV2:
         self.train_df = pd.read_csv(train_path)
         self.test_df = pd.read_csv(test_path)
 
+        self.train_df = self.train_df.head(1000)
+        self.test_df = self.test_df.head(1000)
+
+        self.train_qs, self.val_qs, self.train_labels, self.val_labels = self.get_training_split()
+
         # self.train_df['preprocessed_text'] = self.preprocessing(self.train_df['question_text'])
         # self.test_df['preprocessed_text'] = self.preprocessing(self.test_df['question_text'])
 
@@ -76,10 +81,11 @@ class DataV2:
         labels = self.train_df.loc[:, self.label_col].values
         return labels
 
-    def get_training_split(self, seed=0):
+    def get_training_split(self, test_size=0.1, seed=0):
         train_qs, val_qs, train_labels, val_labels = train_test_split(self.train_df[self.text_col].tolist(),
                                                                       self.train_df[self.label_col].tolist(),
                                                                       stratify=self.train_df[self.label_col].tolist(),
+                                                                      test_size=0.1,
                                                                       random_state=seed)
         return train_qs, val_qs, train_labels, val_labels
 
@@ -128,8 +134,8 @@ class CorpusInfo:
         plt.hlines(0.975, 0, 30, colors='red')
 
 
-# nlp = spacy.load('en_core_web_sm', disable=['parser', 'tagger', 'ner'])
-# data = DataV2()
+nlp = spacy.load('en_core_web_sm', disable=['parser', 'tagger', 'ner'])
+data = DataV2()
 #
 # train_qs, val_qs, train_labels, val_labels = data.get_training_split()
 #

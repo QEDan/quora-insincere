@@ -193,15 +193,19 @@ def main():
     text_mapper = TextMapper(word_counts=word_counts, char_counts=char_counts, word_threshold=10, max_word_len=20,
                              char_threshold=350, max_sent_len=100, nlp=nlp, word_lowercase=True, char_lowercase=True)
 
-    embeddings = load_embeddings(word_counts, embedding_files)
-    save_unknown_words(data, embeddings, max_words=200)
-    models_all = list()
-    for model in config.get('models'):
-        model_class = globals()[model.get('class')]
-        models_all.extend(cross_validate(model_class,
-                                         data,
-                                         embeddings,
-                                         model_config=model.get('args')))
+    # embeddings = load_embeddings(word_counts, embedding_files)
+    # save_unknown_words(data, embeddings, max_words=200)
+    # models_all = list()
+    # for model in config.get('models'):
+    #     model_class = globals()[model.get('class')]
+    #     models_all.extend(cross_validate(model_class,
+    #                                      data,
+    #                                      embeddings,
+    #                                      model_config=model.get('args')))
+
+    model = BiLSTMCharCNNModel(data, corpus_info, text_mapper)
+    model.fit()
+
     cleanup_models(models_all)
     ensemble_cv = Ensemble(models_all)
     train_X = [data.train_X]

@@ -242,7 +242,7 @@ class InsincereModelV2:
 
     def _get_callbacks(self, epochs, batch_size):
         config = self.config.get('callbacks')
-        num_samples = self.data.train_X.shape[0]
+        num_samples = len(self.data.train_qs)
         self.lr_finder = LRFinder(num_samples, batch_size)
         lr_manager = OneCycleLR(num_samples, epochs, batch_size)
         check_point = ModelCheckpoint('model.hdf5',
@@ -259,11 +259,12 @@ class InsincereModelV2:
     def fit(self, curve_file_suffix=None):
         logging.info("Fitting model...")
         config = self.config.get('fit')
-        train_text, val_text, train_labels, val_labels = self.data.get_training_split()
-        train_generator = DataGenerator(text=train_text, labels=train_labels, text_mapper=self.text_mapper,
-                                        batch_size=32)
-        val_generator = DataGenerator(text=val_text, labels=val_labels, text_mapper=self.text_mapper,
-                                      batch_size=32)
+
+        train_generator = DataGenerator(text=self.data.train_qs, labels=self.data.train_labels,
+                                        text_mapper=self.text_mapper, batch_size=32)
+        val_generator = DataGenerator(text=self.data.val_qs, labels=self.data.val_labels,
+                                      text_mapper=self.text_mapper, batch_size=32)
+
         callbacks = self._get_callbacks(config.get('epochs'), config.get('batch_size'))
 
         self.history = self.model.fit_generator(generator=train_generator,
