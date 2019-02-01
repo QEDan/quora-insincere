@@ -4,7 +4,7 @@ import numpy as np
 
 
 class DataGenerator(keras.utils.Sequence):
-    def __init__(self, text, labels, text_mapper, batch_size=32, shuffle=True):
+    def __init__(self, text, labels, text_mapper, batch_size=16, shuffle=True):
         self.batch_size = batch_size
         self.text = text
         self.labels = labels

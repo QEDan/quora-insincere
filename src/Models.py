@@ -138,13 +138,13 @@ class CNNModel(InsincereModel):
         return config
 
 
-from keras.layers import TimeDistributed
+from keras.layers import TimeDistributed, LSTM
 from keras.layers import Dropout, GlobalMaxPooling1D, Concatenate
 
 class BiLSTMCharCNNModel(InsincereModelV2):
 
-    def __init__(self, data, corpus_info, text_mapper):
-        super().__init__(data, corpus_info, text_mapper)
+    def __init__(self, data, corpus_info, text_mapper, batch_size):
+        super().__init__(data, corpus_info, text_mapper, batch_size)
         self.model = self.define_model()
 
     def define_model(self, model_config=None):
@@ -162,12 +162,15 @@ class BiLSTMCharCNNModel(InsincereModelV2):
         char_features = char_level_feature_model(chars_input, max_word_len, char_vocab_size)
 
         words_input = Input(shape=(max_sent_len, ), name='words_input', dtype='int64')
-        words_embedding = EmbeddingLayer(input_dim=word_vocab_size, output_dim=300, input_length=max_sent_len)(words_input)
+        words_embedding = EmbeddingLayer(input_dim=word_vocab_size, output_dim=50, input_length=max_sent_len)(words_input)
 
         word_rep = Concatenate()([char_features, words_embedding])
 
-        x = Conv1D(filters=64, kernel_size=3, activation='relu')(word_rep)
-        x = GlobalMaxPooling1D()(x)
+        x = Bidirectional(LSTM(100, return_sequences=True))(word_rep)
+        x = Conv1D(filters=100, kernel_size=2)(x)
+        max_x = GlobalMaxPooling1D()(x)
+        avg_x = GlobalAveragePooling1D()(x)
+        x = Concatenate()([max_x, avg_x])
         x = Dense(16)(x)
         # x = Flatten()(char_sum)
         preds = Dense(1, activation='sigmoid')(x)
@@ -189,8 +192,8 @@ from keras.layers import GlobalMaxPooling2D
 
 class CharCNNWordModel(InsincereModelV2):
     """ this is an experiment to check that character convolutions are outputting as expected """
-    def __init__(self, data, corpus_info, text_mapper):
-        super().__init__(data, corpus_info, text_mapper)
+    def __init__(self, data, corpus_info, text_mapper, batch_size):
+        super().__init__(data, corpus_info, text_mapper, batch_size)
         self.model = self.define_model()
 
     def define_model(self, model_config=None):
@@ -210,7 +213,7 @@ class CharCNNWordModel(InsincereModelV2):
         # todo: add another input here with additional character information (caps, number, punc, etc)
 
         # do one dimensional convolutions over each word. filter size will determine size of vector for each word (if globalpool)
-        char_conv = TimeDistributed(Conv1D(filters=500, kernel_size=3))(chars_words_embedding)
+        char_conv = TimeDistributed(Conv1D(filters=300, kernel_size=3))(chars_words_embedding)
 
         # represent each filter with it's max value -  each filter looks for one feature
         x = TimeDistributed(GlobalMaxPooling1D())(char_conv)
@@ -232,7 +235,8 @@ class CharCNNWordModel(InsincereModelV2):
 
 def char_level_feature_model(input_layer, max_word_len, char_vocab_size):
     chars_words_embedding = TimeDistributed(EmbeddingLayer(char_vocab_size, output_dim=16, input_length=max_word_len))(input_layer)
-    char_conv = TimeDistributed(Conv1D(filters=500, kernel_size=3))(chars_words_embedding)
+    # todo: add additional char features here
+    char_conv = TimeDistributed(Conv1D(filters=100, kernel_size=3))(chars_words_embedding)
     x = TimeDistributed(GlobalMaxPooling1D())(char_conv)
     return x
 
@@ -261,39 +265,4 @@ def char_level_feature_model(input_layer, max_word_len, char_vocab_size):
 # model = BiLSTMCharCNNModel(data, corpus_info, text_mapper)
 #
 # model.model.summary()
-#
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+# # #

@@ -173,7 +173,7 @@ class InsincereModel:
 
 
 class InsincereModelV2:
-    def __init__(self, data, corpus_info, text_mapper, name=None, loss='binary_crossentropy'):
+    def __init__(self, data, corpus_info, text_mapper, batch_size=16, name=None, loss='binary_crossentropy'):
         self.data = data
         self.corpus_info = corpus_info
         self.text_mapper = text_mapper
@@ -184,6 +184,7 @@ class InsincereModelV2:
         self.loss = loss
         self.lr_finder = None
         self.config = config_insincere_model
+        self.batch_size = batch_size
 
     def load_embedding(self, embedding_file='../input/embeddings/glove.840B.300d/glove.840B.300d.txt'):
         self.embedding = Embedding(self.corpus_info.word_counts)
@@ -265,9 +266,9 @@ class InsincereModelV2:
         config = self.config.get('fit')
 
         train_generator = DataGenerator(text=self.data.train_qs, labels=self.data.train_labels,
-                                        text_mapper=self.text_mapper, batch_size=32)
+                                        text_mapper=self.text_mapper, batch_size=self.batch_size)
         val_generator = DataGenerator(text=self.data.val_qs, labels=self.data.val_labels,
-                                      text_mapper=self.text_mapper, batch_size=32)
+                                      text_mapper=self.text_mapper, batch_size=self.batch_size)
 
         callbacks = self._get_callbacks(config.get('epochs'), config.get('batch_size'))
 

@@ -203,7 +203,7 @@ def main():
     #                                      embeddings,
     #                                      model_config=model.get('args')))
 
-    model = BiLSTMCharCNNModel(data, corpus_info, text_mapper)
+    model = BiLSTMCharCNNModel(data, corpus_info, text_mapper, 64)
     model.fit()
 
     # cleanup_models(models_all)
@@ -223,12 +223,12 @@ def main():
     # write_predictions(data, pred_y_test, thresh)
 
 
-if __name__ == "__main__":
-    logging.getLogger()
-    logging.basicConfig(
-        format='%(asctime)s %(levelname)-8s %(message)s',
-        level=logging.DEBUG,
-        datefmt='%Y-%m-%d %H:%M:%S')
-    save_configs()
-    main()
-    logging.info("Done!")
+# if __name__ == "__main__":
+#     logging.getLogger()
+#     logging.basicConfig(
+#         format='%(asctime)s %(levelname)-8s %(message)s',
+#         level=logging.DEBUG,
+#         datefmt='%Y-%m-%d %H:%M:%S')
+#     save_configs()
+#     main()
+#     logging.info("Done!")
