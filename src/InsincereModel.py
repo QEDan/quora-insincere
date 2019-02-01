@@ -2,7 +2,7 @@ import keras.backend as K
 import logging
 import matplotlib.pyplot as plt
 import numpy as np
-from keras.callbacks import ModelCheckpoint, EarlyStopping
+from keras.callbacks import EarlyStopping
 
 from data_generator import DataGenerator
 from Embedding import Embedding
@@ -85,16 +85,17 @@ class InsincereModel:
         num_samples = self.data.train_X.shape[0]
         self.lr_finder = LRFinder(num_samples, batch_size)
         lr_manager = OneCycleLR(num_samples, epochs, batch_size)
-        check_point = ModelCheckpoint('model.hdf5',
-                                      monitor=config.get('checkpoint').get('monitor'),
-                                      mode=config.get('checkpoint').get('mode'),
-                                      verbose=config.get('checkpoint').get('verbose'),
-                                      save_best_only=config.get('checkpoint').get('save_best_only'))
+        # check_point = ModelCheckpoint('model.hdf5',
+        #                               monitor=config.get('checkpoint').get('monitor'),
+        #                               mode=config.get('checkpoint').get('mode'),
+        #                               verbose=config.get('checkpoint').get('verbose'),
+        #                               save_best_only=config.get('checkpoint').get('save_best_only'))
         early_stop = EarlyStopping(monitor=config.get('early_stopping').get('monitor'),
                                    mode=config.get('early_stopping').get('mode'),
                                    patience=config.get('early_stopping').get('patience'),
-                                   verbose=config.get('early_stopping').get('verbose'))
-        return [self.lr_finder, lr_manager, check_point, early_stop]
+                                   verbose=config.get('early_stopping').get('verbose'),
+                                   restore_best_weights=True)
+        return [self.lr_finder, lr_manager, early_stop]
 
     def fit(self,
             train_indices=None,
@@ -138,6 +139,8 @@ class InsincereModel:
                                       epochs=config.get('epochs'),
                                       validation_data=(val_x, val_y),
                                       callbacks=callbacks)
+
+        self.model.save('/home/matt_kierans/kaggle/test.h5')
         if config.get('save_curve'):
             self.lr_finder.plot_schedule(filename="lr_schedule_" + str(self.name) + ".png")
             filename = 'training_curve'
@@ -245,16 +248,17 @@ class InsincereModelV2:
         num_samples = len(self.data.train_qs)
         self.lr_finder = LRFinder(num_samples, batch_size)
         lr_manager = OneCycleLR(num_samples, epochs, batch_size)
-        check_point = ModelCheckpoint('model.hdf5',
-                                      monitor=config.get('checkpoint').get('monitor'),
-                                      mode=config.get('checkpoint').get('mode'),
-                                      verbose=config.get('checkpoint').get('verbose'),
-                                      save_best_only=config.get('checkpoint').get('save_best_only'))
+        # check_point = ModelCheckpoint('model.hdf5',
+        #                               monitor=config.get('checkpoint').get('monitor'),
+        #                               mode=config.get('checkpoint').get('mode'),
+        #                               verbose=config.get('checkpoint').get('verbose'),
+        #                               save_best_only=config.get('checkpoint').get('save_best_only'))
         early_stop = EarlyStopping(monitor=config.get('early_stopping').get('monitor'),
                                    mode=config.get('early_stopping').get('mode'),
                                    patience=config.get('early_stopping').get('patience'),
-                                   verbose=config.get('early_stopping').get('verbose'))
-        return [self.lr_finder, lr_manager, check_point, early_stop]
+                                   verbose=config.get('early_stopping').get('verbose'),
+                                   restore_best_weights=True)
+        return [lr_manager, early_stop]
 
     def fit(self, curve_file_suffix=None):
         logging.info("Fitting model...")
@@ -268,7 +272,7 @@ class InsincereModelV2:
         callbacks = self._get_callbacks(config.get('epochs'), config.get('batch_size'))
 
         self.history = self.model.fit_generator(generator=train_generator,
-                                                epochs=config.get('epochs'),
+                                                epochs=100,
                                                 validation_data=val_generator,
                                                 use_multiprocessing=True,
                                                 callbacks=callbacks)

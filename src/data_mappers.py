@@ -69,8 +69,8 @@ class TextMapper:
     def texts_to_x(self, texts):
         inputs_x = [self.text_to_x(text) for text in texts]
         words_input, chars_input = map(np.array, zip(*inputs_x))
-        return words_input
-        # return {"words_input": words_input, "chars_input": chars_input}
+        # return words_input
+        return {"words_input": words_input, "chars_input": chars_input}
 
     def set_max_sentence_len(self, max_sent_len):
         self.word_mapper.set_max_len(max_sent_len)

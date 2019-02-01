@@ -34,7 +34,7 @@ config_insincere_model = {'callbacks': {'checkpoint': {'monitor': 'val_f1_score'
                                         },
                           'fit': {'pseudo_labels': False,
                                   'batch_size': 1536,
-                                  'epochs': 10,
+                                  'epochs': 100,
                                   'save_curve': True
                                   },
                           'predict': {'batch_size': 1024,
