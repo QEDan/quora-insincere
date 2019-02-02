@@ -209,7 +209,7 @@ def main():
     model.define_model()
     model.fit()
 
-    cleanup_models([model])  # embedding/memory cleanup
+    # cleanup_models([model])  # embedding/memory cleanup
 
     val_preds = model.predict_subset(subset='val')
 

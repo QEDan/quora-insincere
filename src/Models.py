@@ -171,7 +171,7 @@ class BiLSTMCharCNNModel(InsincereModelV2):
 
         # todo: maybe bidirectional lstm is just too slow, can try a deeper convolutional network
         x = Bidirectional(CuDNNLSTM(64, return_sequences=True))(word_rep)
-        x = Bidirectional(CuDNNLSTM(64, return_sequences=True))(x)
+        x = Bidirectional(CuDNNLSTM(64))(x)
         # x = Conv1D(filters=100, kernel_size=2)(x)
         # max_x = GlobalMaxPooling1D()(x)
         # avg_x = GlobalAveragePooling1D()(x)
@@ -245,7 +245,7 @@ def char_level_feature_model(input_layer, max_word_len, char_vocab_size):
         # todo: add dropout or batchnorm here? global average pooling?
         x = TimeDistributed(GlobalMaxPooling1D())(char_conv)
         conv_outputs.append(x)
-    char_features_rep = Concatenate()(conv_kernels)
+    char_features_rep = Concatenate()(conv_outputs)
     # todo: add dense layers here to better represent character features
     return char_features_rep
 
@@ -272,6 +272,6 @@ def char_level_feature_model(input_layer, max_word_len, char_vocab_size):
 #
 # # model = CharCNNWordModel(data, corpus_info, text_mapper)
 # model = BiLSTMCharCNNModel(data, corpus_info, text_mapper)
-#
+# model.define_model()
 # model.model.summary()
-# # #
+# # # #

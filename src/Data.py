@@ -68,7 +68,7 @@ class DataV2:
         return questions
 
     def get_questions(self, subset='train'):
-        # todo: add functionality to only get data with a certain label
+        # todo: add functionality to only get data with a certain label (if we want to fine tune word embeddings...)
         if subset == 'train':
             data = list(self.train_df[self.text_col])
         if subset == 'test':
