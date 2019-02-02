@@ -1,7 +1,7 @@
 import keras.backend as K
 from keras.callbacks import Callback
 
-from config import config_one_cycle as config
+from src.config import config_one_cycle as config
 
 
 class OneCycleLR(Callback):
