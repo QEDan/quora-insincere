@@ -247,8 +247,8 @@ class InsincereModelV2:
     def _get_callbacks(self, epochs, batch_size):
         config = self.config.get('callbacks')
         num_samples = len(self.data.train_qs)
-        self.lr_finder = LRFinder(num_samples, batch_size)
-        lr_manager = OneCycleLR(num_samples, epochs, batch_size)
+        # self.lr_finder = LRFinder(num_samples, batch_size)
+        # lr_manager = OneCycleLR(num_samples, epochs, batch_size)
         # check_point = ModelCheckpoint('model.hdf5',
         #                               monitor=config.get('checkpoint').get('monitor'),
         #                               mode=config.get('checkpoint').get('mode'),
@@ -257,29 +257,43 @@ class InsincereModelV2:
         early_stop = EarlyStopping(monitor=config.get('early_stopping').get('monitor'),
                                    mode=config.get('early_stopping').get('mode'),
                                    patience=config.get('early_stopping').get('patience'),
-                                   verbose=config.get('early_stopping').get('verbose'))
-                                   # restore_best_weights=True)
-        return [lr_manager, early_stop]
+                                   verbose=config.get('early_stopping').get('verbose'),
+                                   restore_best_weights=True)
+        return [early_stop]
 
     def fit(self, curve_file_suffix=None):
         logging.info("Fitting model...")
         config = self.config.get('fit')
 
-        train_generator = DataGenerator(text=self.data.train_qs, labels=self.data.train_labels,
-                                        text_mapper=self.text_mapper, batch_size=self.batch_size)
-        val_generator = DataGenerator(text=self.data.val_qs, labels=self.data.val_labels,
-                                      text_mapper=self.text_mapper, batch_size=self.batch_size)
+        train_input = self.text_mapper.texts_to_x(self.data.train_qs)
+        val_input = self.text_mapper.texts_to_x(self.data.val_qs)
+
+        train_words_input = train_input['words_input']
+        train_chars_input = train_input['chars_input']
+        val_words_input = val_input['words_input']
+        val_chars_input = val_input['chars_input']
+
+        train_labels = np.array(self.data.train_labels)
+        val_labels = np.array(self.data.val_labels)
+
+        # train_generator = DataGenerator(text=self.data.train_qs, labels=self.data.train_labels,
+        #                                 text_mapper=self.text_mapper, batch_size=self.batch_size)
+        # val_generator = DataGenerator(text=self.data.val_qs, labels=self.data.val_labels,
+        #                               text_mapper=self.text_mapper, batch_size=self.batch_size)
 
         callbacks = self._get_callbacks(config.get('epochs'), config.get('batch_size'))
 
-        self.history = self.model.fit_generator(generator=train_generator,
-                                                epochs=100,
-                                                validation_data=val_generator,
-                                                use_multiprocessing=True,
-                                                callbacks=callbacks)
+        self.history = self.model.fit(x={'words_input': train_words_input, 'chars_input': train_chars_input},
+                                      y=train_labels,
+                                      epochs=10,
+                                      batch_size=32,
+                                      validation_data=({'words_input': val_words_input,
+                                                        'chars_input': val_chars_input},
+                                                       val_labels),
+                                      callbacks=callbacks)
 
         if config.get('save_curve'):
-            self.lr_finder.plot_schedule(filename="lr_schedule_" + str(self.name) + ".png")
+            # self.lr_finder.plot_schedule(filename="lr_schedule_" + str(self.name) + ".png")
             filename = 'training_curve'
             if self.name:
                 filename += '_' + self.name

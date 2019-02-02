@@ -78,7 +78,7 @@ class TextMapper:
     def set_max_char_len(self, max_char_len):
         self.char_mapper.set_max_len(max_char_len)
 
-    def get_word_vocab(self):
+    def get_words_vocab(self):
         return self.word_mapper.vocab
 
 

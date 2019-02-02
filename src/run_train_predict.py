@@ -193,7 +193,7 @@ def main():
     text_mapper = TextMapper(word_counts=word_counts, char_counts=char_counts, word_threshold=10, max_word_len=20,
                              char_threshold=350, max_sent_len=100, nlp=nlp, word_lowercase=True, char_lowercase=True)
 
-    word_vocab = text_mapper.get_word_vocab()
+    word_vocab = text_mapper.get_words_vocab()
     # embeddings = load_embeddings(word_vocab, embedding_files)
     # save_unknown_words(data, embeddings, max_words=200)
     # models_all = list()
@@ -204,7 +204,7 @@ def main():
     #                                      embeddings,
     #                                      model_config=model.get('args')))
 
-    model = BiLSTMCharCNNModel(data=data, corpus_info=corpus_info, text_mapper=text_mapper, batch_size=64)
+    model = BiLSTMCharCNNModel(data=data, corpus_info=corpus_info, text_mapper=text_mapper, batch_size=32)
     # model.blend_embeddings(embeddings)
     model.define_model()
     model.fit()
@@ -233,12 +233,12 @@ def main():
     # write_predictions(data, pred_y_test, thresh)
 
 
-# if __name__ == "__main__":
-#     logging.getLogger()
-#     logging.basicConfig(
-#         format='%(asctime)s %(levelname)-8s %(message)s',
-#         level=logging.DEBUG,
-#         datefmt='%Y-%m-%d %H:%M:%S')
-#     save_configs()
-#     main()
-#     logging.info("Done!")
+if __name__ == "__main__":
+    logging.getLogger()
+    logging.basicConfig(
+        format='%(asctime)s %(levelname)-8s %(message)s',
+        level=logging.DEBUG,
+        datefmt='%Y-%m-%d %H:%M:%S')
+    save_configs()
+    main()
+    logging.info("Done!")

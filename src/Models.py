@@ -164,12 +164,12 @@ class BiLSTMCharCNNModel(InsincereModelV2):
                                              weights=[self.embedding.embedding_matrix] if self.embedding else None,
                                              trainable=False)(words_input)
         else:
-            words_embedding = EmbeddingLayer(input_dim=word_vocab_size, output_dim=50,
+            words_embedding = EmbeddingLayer(input_dim=word_vocab_size, output_dim=10,
                                              input_length=max_sent_len)(words_input)
 
         word_rep = Concatenate()([char_features, words_embedding])
 
-        x = Bidirectional(LSTM(100, return_sequences=True))(word_rep)
+        x = Bidirectional(LSTM(20, return_sequences=True))(word_rep)
         x = Conv1D(filters=100, kernel_size=2)(x)
         max_x = GlobalMaxPooling1D()(x)
         avg_x = GlobalAveragePooling1D()(x)
@@ -181,7 +181,7 @@ class BiLSTMCharCNNModel(InsincereModelV2):
         inputs = [chars_input, words_input]
 
         self.model = Model(inputs=inputs, outputs=preds)
-        self.model.compile(loss=self.loss, optimizer='sgd', metrics=['accuracy', self.f1_score])
+        self.model.compile(loss=self.loss, optimizer='adam', metrics=['accuracy', self.f1_score])
 
         return self.model
 
