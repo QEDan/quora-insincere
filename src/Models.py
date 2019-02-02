@@ -1,148 +1,17 @@
-from keras.layers import Bidirectional, CuDNNLSTM, Reshape, Conv2D, MaxPool2D, \
-    Concatenate, Flatten, GlobalAveragePooling1D, GlobalMaxPooling1D, concatenate,Conv1D, MaxPooling1D
-from keras.layers import Dense, Input, Embedding as EmbeddingLayer, Dropout, Conv2D
-from keras.models import Model
-
-from Attention import Attention
-from InsincereModel import InsincereModel, InsincereModelV2
-
-import logging
 import matplotlib
-from pprint import pprint
+from keras import Input, Model
+
+from src.InsincereModel import InsincereModel
 
 matplotlib.use('Agg')
-import matplotlib.pyplot as plt
-import numpy as np
-import os
-import pandas as pd
-import random
-import tensorflow as tf
-import spacy
 
-from sklearn import metrics
-from sklearn.metrics import precision_recall_curve
-from sklearn.model_selection import StratifiedKFold
+from src.Models import *  # Make all models available for easy script generation.
 
-from Data import Data, DataV2, CorpusInfo
-from data_mappers import TextMapper
-from Embedding import Embedding
-from Ensemble import Ensemble
-from Models import *  # Make all models available for easy script generation.
-from config import random_state as SEED, config_main as config
-
-import tensorflow as tf
-import keras.backend as K
-
-class LSTMModel(InsincereModel):
-    def define_model(self, model_config=None):
-        if model_config is None:
-            model_config = self.default_config()
-        inp = Input(shape=(self.data.maxlen,))
-        x = EmbeddingLayer(self.embedding.nb_words,
-                           self.embedding.embed_size,
-                           weights=[self.embedding.embedding_matrix],
-                           trainable=False)(inp)
-        x = Bidirectional(CuDNNLSTM(model_config['lstm_size'], return_sequences=True))(x)
-        avg_pool = GlobalAveragePooling1D()(x)
-        max_pool = GlobalMaxPooling1D()(x)
-        concat_layers = [avg_pool, max_pool]
-        inputs = [inp]
-        if self.data.custom_features:
-            inp_features = Input(shape=(len(self.data.custom_features),))
-            concat_layers += [inp_features]
-            inputs += [inp_features]
-        x = concatenate([avg_pool, max_pool, inp_features])
-        x = Dense(model_config['dense_size'], activation="relu")(x)
-        x = Dropout(model_config['dropout_rate'])(x)
-        x = Dense(1, activation="sigmoid")(x)
-        self.model = Model(inputs=inputs, outputs=x)
-        self.model.compile(loss=self.loss, optimizer='sgd', metrics=['accuracy', self.f1_score])
-        return self.model
-
-    def default_config(self):
-        config = {'lstm_size': 64,
-                  'dense_size': 64,
-                  'dropout_rate': 0.1,
-                  }
-        return config
+from keras.layers import TimeDistributed, Embedding as EmbeddingLayer, Bidirectional, CuDNNLSTM, Dense, Conv1D
+from keras.layers import GlobalMaxPooling1D, Concatenate
 
 
-class LSTMModelAttention(InsincereModel):
-    def define_model(self, model_config=None):
-        if model_config is None:
-            model_config = self.default_config()
-        inp = Input(shape=(self.data.maxlen,))
-        x = EmbeddingLayer(self.embedding.nb_words,
-                           self.embedding.embed_size,
-                           weights=[self.embedding.embedding_matrix],
-                           trainable=False)(inp)
-        x = Bidirectional(CuDNNLSTM(model_config['lstm_size'], return_sequences=True))(x)
-        x = Attention(self.data.maxlen)(x)
-        inputs = [inp]
-        if self.data.custom_features:
-            inp_features = Input(shape=(len(self.data.custom_features),))
-            x = concatenate([x, inp_features])
-            x = Dense(model_config['dense_size_1'], activation="relu")(x)
-            inputs += [inp_features]
-        x = Dense(model_config['dense_size_2'], activation="relu")(x)
-        x = Dropout(model_config['dropout_rate'])(x)
-        x = Dense(1, activation="sigmoid")(x)
-        self.model = Model(inputs=inputs, outputs=x)
-        self.model.compile(loss=self.loss, optimizer='sgd', metrics=['accuracy', self.f1_score])
-        return self.model
-
-    def default_config(self):
-        config = {'lstm_size': 64,
-                  'dense_size_1': 32,
-                  'dense_size_2': 16,
-                  'dropout_rate': 0.1,
-                  }
-        return config
-
-
-class CNNModel(InsincereModel):
-    def define_model(self, model_config=None):
-        if model_config is None:
-            model_config = self.default_config()
-        filter_sizes = model_config['filter_sizes']
-        num_filters = model_config['num_filters']
-        inp = Input(shape=(self.data.maxlen,))
-        x = EmbeddingLayer(self.embedding.nb_words, self.embedding.embed_size,
-                           weights=[self.embedding.embedding_matrix])(inp)
-        x = Reshape((self.data.maxlen, self.embedding.embed_size, 1))(x)
-        maxpool_pool = []
-        inputs = [inp]
-        for i in range(len(filter_sizes)):
-            conv = Conv2D(num_filters, kernel_size=(filter_sizes[i], self.embedding.embed_size),
-                          kernel_initializer='he_normal', activation='elu')(x)
-            maxpool_pool.append(MaxPool2D(pool_size=(self.data.maxlen - filter_sizes[i] + 1, 1))(conv))
-        z = Concatenate(axis=1)(maxpool_pool)
-        z = Flatten()(z)
-        z = Dropout(model_config['dropout_rate'])(z)
-        if self.data.custom_features:
-            inp_features = Input(shape=(len(self.data.custom_features),))
-            z = concatenate([z, inp_features])
-            z = Dense(model_config['dense_size'], activation='relu')(z)
-            inputs += [inp_features]
-        outp = Dense(1, activation="sigmoid")(z)
-        self.model = Model(inputs=inputs, outputs=outp)
-        self.model.compile(loss=self.loss, optimizer='sgd', metrics=['accuracy', self.f1_score])
-
-        return self.model
-
-    def default_config(self):
-        config = {'filter_sizes': [1, 2, 3, 5],
-                  'num_filters': 36,
-                  'dropout_rate': 0.1,
-                  'dense_size': 32}
-        return config
-
-
-from keras.layers import TimeDistributed, LSTM
-from keras.layers import Dropout, GlobalMaxPooling1D, Concatenate
-
-class BiLSTMCharCNNModel(InsincereModelV2):
-
+class BiLSTMCharCNNModel(InsincereModel):
     def define_model(self, model_config=None):
         # if model_config is None:
         #     model_config = self.default_config()
@@ -187,15 +56,8 @@ class BiLSTMCharCNNModel(InsincereModelV2):
 
         return self.model
 
-    # def cnn_char_arch(self, word_char_input):
-    #     char_vocab_size = self.text_mapper.char_mapper.get_vocab_len()
-    #
-    #     char_embedding_input = Input(shape=char_vocab_size)
-    #     char_embedding = EmbeddingLayer(inpu_dim)
 
-from keras.layers import GlobalMaxPooling2D
-
-class CharCNNWordModel(InsincereModelV2):
+class CharCNNWordModel(InsincereModel):
     """ this is an experiment to check that character convolutions are outputting as expected """
     def define_model(self, model_config=None):
         # if model_config is None:
@@ -227,12 +89,6 @@ class CharCNNWordModel(InsincereModelV2):
 
         return self.model
 
-    # def cnn_char_arch(self, word_char_input):
-    #     char_vocab_size = self.text_mapper.char_mapper.get_vocab_len()
-    #
-    #     char_embedding_input = Input(shape=char_vocab_size)
-    #     char_embedding = EmbeddingLayer(inpu_dim)
-
 
 def char_level_feature_model(input_layer, max_word_len, char_vocab_size):
     chars_words_embedding = TimeDistributed(EmbeddingLayer(char_vocab_size, output_dim=16, input_length=max_word_len))(input_layer)
@@ -249,29 +105,3 @@ def char_level_feature_model(input_layer, max_word_len, char_vocab_size):
     # todo: add dense layers here to better represent character features
     return char_features_rep
 
-# dev_size = config.get('dev_size')
-# data = DataV2()
-#
-# nlp = spacy.load('en_core_web_sm', disable=['parser', 'tagger', 'ner'])
-# corpus_info = CorpusInfo(data.get_questions(subset='train'), nlp)
-# word_counts = corpus_info.word_counts
-# char_counts = corpus_info.char_counts
-#
-# text_mapper = TextMapper(word_counts=word_counts, char_counts=char_counts, word_threshold=10, max_word_len=20,
-#                          char_threshold=350, max_sent_len=100, nlp=nlp, word_lowercase=True, char_lowercase=True)
-#
-# # embeddings = load_embeddings(word_counts, embedding_files)
-# # save_unknown_words(data, embeddings, max_words=200)
-# # models_all = list()
-# # for model in config.get('models'):
-# #     model_class = globals()[model.get('class')]
-# #     models_all.extend(cross_validate(model_class,
-# #                                      data,
-# #                                      embeddings,
-# #                                      model_config=model.get('args')))
-#
-# # model = CharCNNWordModel(data, corpus_info, text_mapper)
-# model = BiLSTMCharCNNModel(data, corpus_info, text_mapper)
-# model.define_model()
-# model.model.summary()
-# # # #

@@ -15,12 +15,11 @@ from sklearn import metrics
 from sklearn.metrics import precision_recall_curve
 from sklearn.model_selection import StratifiedKFold
 
-from Data import Data, DataV2, CorpusInfo
-from data_mappers import TextMapper
-from Embedding import Embedding
-from Ensemble import Ensemble
-from Models import *  # Make all models available for easy script generation.
-from config import random_state as SEED, config_main as config
+from src.Data import Data, CorpusInfo
+from src.data_mappers import TextMapper
+from src.Embedding import Embedding
+from src.Models import *  # Make all models available for easy script generation.
+from src.config import random_state as SEED, config_main as config
 
 np.random.seed(SEED)
 tf.set_random_seed(SEED)
@@ -167,7 +166,7 @@ def cleanup_models(models):
         m.cleanup()
 
 def save_configs():
-    from config import random_state, \
+    from src.config import random_state, \
         config_data, \
         config_insincere_model, \
         config_lrfinder, \
@@ -183,7 +182,9 @@ def save_configs():
 def main():
     embedding_files = config.get('embedding_files')
     dev_size = config.get('dev_size')
-    data = DataV2()
+    data = Data()
+    data.load(dev_size)
+    data.split()
 
     nlp = spacy.load('en_core_web_sm', disable=['parser', 'tagger', 'ner'])
     corpus_info = CorpusInfo(data.get_questions(subset='train'), nlp)
@@ -242,5 +243,10 @@ if __name__ == "__main__":
         level=logging.DEBUG,
         datefmt='%Y-%m-%d %H:%M:%S')
     save_configs()
+    config_tf = tf.ConfigProto()
+    config_tf.gpu_options.allow_growth = True  # dynamically grow the memory used on the GPU
+    config_tf.log_device_placement = True  # to log device placement (on which device the operation ran)
+    sess = tf.Session(config=config_tf)
     main()
+    sess.close()
     logging.info("Done!")
