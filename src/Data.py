@@ -94,7 +94,7 @@ class CorpusInfo:
     """ Calculates corpus information to be referenced during feature engineering later """
     # todo: pass in a general tokenizer (so that it matches the tokenizer in the rest of the pipeline)
     # todo: how can we make this run faster? can be parallelized...?
-    def __init__(self, questions, nlp, word_lowercase=True, char_lowercase=False):
+    def __init__(self, questions, nlp, word_lowercase=True, char_lowercase=True):
         self.nlp = nlp
         self.word_lowercase = word_lowercase
         self.char_lowercase = char_lowercase

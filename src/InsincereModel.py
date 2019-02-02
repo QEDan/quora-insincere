@@ -10,6 +10,12 @@ from LRFinder import LRFinder
 from OneCycleLR import OneCycleLR
 from config import config_insincere_model
 
+from keras.backend.tensorflow_backend import set_session
+import tensorflow as tf
+config = tf.ConfigProto()
+config.gpu_options.allow_growth = True  # dynamically grow the memory used on the GPU
+config.log_device_placement = True  # to log device placement (on which device the operation ran)
+sess = tf.Session(config=config)
 
 class InsincereModel:
     def __init__(self, data, name=None, loss='binary_crossentropy'):

@@ -169,12 +169,14 @@ class BiLSTMCharCNNModel(InsincereModelV2):
 
         word_rep = Concatenate()([char_features, words_embedding])
 
-        x = Bidirectional(LSTM(20, return_sequences=True))(word_rep)
-        x = Conv1D(filters=100, kernel_size=2)(x)
-        max_x = GlobalMaxPooling1D()(x)
-        avg_x = GlobalAveragePooling1D()(x)
-        x = Concatenate()([max_x, avg_x])
-        x = Dense(16)(x)
+        # todo: maybe bidirectional lstm is just too slow, can try a deeper convolutional network
+        x = Bidirectional(CuDNNLSTM(64, return_sequences=True))(word_rep)
+        x = Bidirectional(CuDNNLSTM(64, return_sequences=True))(x)
+        # x = Conv1D(filters=100, kernel_size=2)(x)
+        # max_x = GlobalMaxPooling1D()(x)
+        # avg_x = GlobalAveragePooling1D()(x)
+        # x = Concatenate()([max_x, avg_x])
+        # x = Dense(16)(x)
         # x = Flatten()(char_sum)
         preds = Dense(1, activation='sigmoid')(x)
 
@@ -235,9 +237,17 @@ class CharCNNWordModel(InsincereModelV2):
 def char_level_feature_model(input_layer, max_word_len, char_vocab_size):
     chars_words_embedding = TimeDistributed(EmbeddingLayer(char_vocab_size, output_dim=16, input_length=max_word_len))(input_layer)
     # todo: add additional char features here
-    char_conv = TimeDistributed(Conv1D(filters=100, kernel_size=3))(chars_words_embedding)
-    x = TimeDistributed(GlobalMaxPooling1D())(char_conv)
-    return x
+    conv_outputs = []
+    # todo: tune these conv kernels
+    conv_kernels = [[32, 2], [32, 3], [32, 4]]
+    for num_filter, kernel_size in conv_kernels:
+        char_conv = TimeDistributed(Conv1D(filters=num_filter, kernel_size=kernel_size))(chars_words_embedding)
+        # todo: add dropout or batchnorm here? global average pooling?
+        x = TimeDistributed(GlobalMaxPooling1D())(char_conv)
+        conv_outputs.append(x)
+    char_features_rep = Concatenate()(conv_kernels)
+    # todo: add dense layers here to better represent character features
+    return char_features_rep
 
 # dev_size = config.get('dev_size')
 # data = DataV2()
