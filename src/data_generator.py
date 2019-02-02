@@ -4,7 +4,7 @@ import numpy as np
 
 
 class DataGenerator(keras.utils.Sequence):
-    def __init__(self, text, labels, text_mapper, batch_size=16, shuffle=True):
+    def __init__(self, text, text_mapper, labels, batch_size=16, shuffle=True):
         self.batch_size = batch_size
         self.text = text
         self.labels = labels
@@ -30,9 +30,12 @@ class DataGenerator(keras.utils.Sequence):
         indexes = self.indexes[index*self.batch_size:(index+1)*self.batch_size]
 
         # Generate data
-        X, y = self.__data_generation(indexes)
-
-        return X, y
+        if self.labels is not None:
+            X, y = self.__data_generation(indexes, return_y=True)
+            return X, y
+        else:
+            X = self.__data_generation(indexes, return_y=False)
+            return X
 
     def on_epoch_end(self):
         """ Updates indexes after each epoch """
@@ -40,13 +43,15 @@ class DataGenerator(keras.utils.Sequence):
         if self.shuffle:
             np.random.shuffle(self.indexes)
 
-    def __data_generation(self, indexes):
+    def __data_generation(self, indexes, return_y=True):
         """ Generates data containing batch_size samples """
         # text samples
         text_samples = [self.text[i] for i in indexes]
-        labels = [self.labels[i] for i in indexes]
-
         X = self.text_mapper.texts_to_x(text_samples)
-        y = np.array(labels)
 
-        return X, y
+        if return_y:
+            labels = [self.labels[i] for i in indexes]
+            y = np.array(labels)
+            return X, y
+        else:
+            return X

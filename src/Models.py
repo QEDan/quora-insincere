@@ -143,10 +143,6 @@ from keras.layers import Dropout, GlobalMaxPooling1D, Concatenate
 
 class BiLSTMCharCNNModel(InsincereModelV2):
 
-    def __init__(self, data, corpus_info, text_mapper, batch_size):
-        super().__init__(data, corpus_info, text_mapper, batch_size)
-        self.model = self.define_model()
-
     def define_model(self, model_config=None):
         # if model_config is None:
         #     model_config = self.default_config()
@@ -161,8 +157,15 @@ class BiLSTMCharCNNModel(InsincereModelV2):
 
         char_features = char_level_feature_model(chars_input, max_word_len, char_vocab_size)
 
-        words_input = Input(shape=(max_sent_len, ), name='words_input', dtype='int64')
-        words_embedding = EmbeddingLayer(input_dim=word_vocab_size, output_dim=50, input_length=max_sent_len)(words_input)
+        words_input = Input(shape=(max_sent_len,), name='words_input', dtype='int64')
+        if self.embedding is not None:
+            words_embedding = EmbeddingLayer(input_dim=word_vocab_size, output_dim=self.embedding.embedding_matrix.shape[1],
+                                             input_length=max_sent_len,
+                                             weights=[self.embedding.embedding_matrix] if self.embedding else None,
+                                             trainable=False)(words_input)
+        else:
+            words_embedding = EmbeddingLayer(input_dim=word_vocab_size, output_dim=50,
+                                             input_length=max_sent_len)(words_input)
 
         word_rep = Concatenate()([char_features, words_embedding])
 
@@ -192,10 +195,6 @@ from keras.layers import GlobalMaxPooling2D
 
 class CharCNNWordModel(InsincereModelV2):
     """ this is an experiment to check that character convolutions are outputting as expected """
-    def __init__(self, data, corpus_info, text_mapper, batch_size):
-        super().__init__(data, corpus_info, text_mapper, batch_size)
-        self.model = self.define_model()
-
     def define_model(self, model_config=None):
         # if model_config is None:
         #     model_config = self.default_config()

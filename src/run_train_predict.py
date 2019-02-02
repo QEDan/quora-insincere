@@ -138,10 +138,10 @@ def cross_validate(model_class, data, embeddings, n_splits=4, show_wrongest=True
     return models
 
 
-def load_embeddings(data, embedding_files, keep_index=True):
+def load_embeddings(word_vocab, embedding_files, keep_index=True):
     embeddings = list()
     for f in embedding_files:
-        embeddings.append(Embedding(data))
+        embeddings.append(Embedding(word_vocab=word_vocab))
         embeddings[-1].load(f)
         if not keep_index:
             embeddings[-1].cleanup_index()
@@ -193,7 +193,8 @@ def main():
     text_mapper = TextMapper(word_counts=word_counts, char_counts=char_counts, word_threshold=10, max_word_len=20,
                              char_threshold=350, max_sent_len=100, nlp=nlp, word_lowercase=True, char_lowercase=True)
 
-    # embeddings = load_embeddings(word_counts, embedding_files)
+    word_vocab = text_mapper.get_word_vocab()
+    # embeddings = load_embeddings(word_vocab, embedding_files)
     # save_unknown_words(data, embeddings, max_words=200)
     # models_all = list()
     # for model in config.get('models'):
@@ -203,11 +204,16 @@ def main():
     #                                      embeddings,
     #                                      model_config=model.get('args')))
 
-    model = BiLSTMCharCNNModel(data, corpus_info, text_mapper, 64)
+    model = BiLSTMCharCNNModel(data=data, corpus_info=corpus_info, text_mapper=text_mapper, batch_size=64)
+    # model.blend_embeddings(embeddings)
+    model.define_model()
     model.fit()
 
-    # cleanup_models(models_all)
-    # ensemble_cv = Ensemble(models_all)
+    cleanup_models([model])  # embedding/memory cleanup
+
+    preds = model.predict(subset='test')
+
+    # ensemble_cv = Ensemble(m odels_all)
     # train_X = [data.train_X]
     # val_X = [data.val_X]
     # test_X = [data.test_X]
@@ -215,8 +221,12 @@ def main():
     #     train_X += [data.train_features]
     #     val_X += [data.val_features]
     #     test_X += [data.test_features]
+
+    # find the best threshold
+
     # pred_train_y = ensemble_cv.predict_linear_regression(train_X, data.train_y, train_X)
     # thresh = find_best_threshold(pred_train_y, data.train_y)
+
     # pred_val_y = ensemble_cv.predict_linear_regression(train_X, data.train_y, val_X)
     # print_diagnostics(data.val_y, (pred_val_y > thresh).astype(int))
     # pred_y_test = ensemble_cv.predict_linear_regression(train_X, data.train_y, test_X)

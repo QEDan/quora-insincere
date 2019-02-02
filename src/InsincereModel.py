@@ -257,8 +257,8 @@ class InsincereModelV2:
         early_stop = EarlyStopping(monitor=config.get('early_stopping').get('monitor'),
                                    mode=config.get('early_stopping').get('mode'),
                                    patience=config.get('early_stopping').get('patience'),
-                                   verbose=config.get('early_stopping').get('verbose'),
-                                   restore_best_weights=True)
+                                   verbose=config.get('early_stopping').get('verbose'))
+                                   # restore_best_weights=True)
         return [lr_manager, early_stop]
 
     def fit(self, curve_file_suffix=None):
@@ -287,6 +287,19 @@ class InsincereModelV2:
                 filename += '_' + curve_file_suffix
             filename += '.png'
             self.print_curve(filename)
+
+    def predict(self, subset='train'):
+        logging.info("Model Predicting...")
+        if subset=='train':
+            data = self.data.train_qs
+        elif subset=='val':
+            data = self.data.val_qs
+        elif subset=='test':
+            data = self.data.get_questions(subset)
+
+        data_generator = DataGenerator(text=data, )
+
+        return
 
     def print_curve(self, filename='training_curve.png'):
         plt.plot(self.history.history['loss'])

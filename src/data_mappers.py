@@ -78,6 +78,9 @@ class TextMapper:
     def set_max_char_len(self, max_char_len):
         self.char_mapper.set_max_len(max_char_len)
 
+    def get_word_vocab(self):
+        return self.word_mapper.vocab
+
 
 class SymbolMapper:
     """ Handles mapping of any symbol (words or characters) into something an model an ingest """
@@ -91,6 +94,7 @@ class SymbolMapper:
         self.max_len = max_len
         self.lowercase = lowercase
 
+        self.vocab = []
         self.symbol_to_ix = dict()
         self.ix_to_symbol = dict()
 
@@ -98,11 +102,11 @@ class SymbolMapper:
 
     def init_mappings(self, check_coverage=True):
         symbol_counts = sorted(self.symbol_counts, key=lambda x: x[1], reverse=True)
-        vocab = [symbol for symbol, count in symbol_counts if count >= self.threshold]
-        vocab = self.BASE_ALPHABET + vocab
+        self.vocab = [symbol for symbol, count in symbol_counts if count >= self.threshold]
+        self.vocab = self.BASE_ALPHABET + self.vocab
 
-        self.symbol_to_ix = {symbol: ix for ix, symbol in enumerate(vocab)}
-        self.ix_to_symbol = {ix: symbol for ix, symbol in enumerate(vocab)}
+        self.symbol_to_ix = {symbol: ix for ix, symbol in enumerate(self.vocab)}
+        self.ix_to_symbol = {ix: symbol for ix, symbol in enumerate(self.vocab)}
 
         if check_coverage:
             self.print_coverage_statistics()

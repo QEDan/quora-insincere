@@ -9,12 +9,12 @@ import traceback
 
 
 class Embedding:
-    def __init__(self, word_counts):
+    def __init__(self, word_vocab):
         self.embeddings_index = None
         self.nb_words = None
         self.embed_size = None
         self.embedding_matrix = None
-        self.word_counts = word_counts
+        self.word_vocab = word_vocab
         self.name = None
 
     def load(self, embedding_file='../input/embeddings/glove.840B.300d/glove.840B.300d.txt'):
@@ -60,9 +60,9 @@ class Embedding:
         emb_mean, emb_std = all_embs.mean(), all_embs.std()
         self.embed_size = all_embs.shape[1]
 
-        self.nb_words = len(self.word_counts)
+        self.nb_words = len(self.word_vocab)
         self.embedding_matrix = np.random.normal(emb_mean, emb_std, (self.nb_words, self.embed_size))
-        for ind, (word, count) in enumerate(self.word_counts):
+        for ind, word in enumerate(self.word_vocab):
             # todo: freezing pre-trained embeddings and unfreezing these unknown, random word embeddings
             embedding_vector = self.embeddings_index.get(word)
             if embedding_vector is not None:

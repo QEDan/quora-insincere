@@ -34,8 +34,8 @@ class DataV2:
         self.train_df = pd.read_csv(train_path)
         self.test_df = pd.read_csv(test_path)
 
-        # self.train_df = self.train_df.head(100000)
-        # self.test_df = self.test_df.head(1000)
+        self.train_df = self.train_df.head(100)
+        self.test_df = self.test_df.head(10)
 
         self.train_qs, self.val_qs, self.train_labels, self.val_labels = self.get_training_split()
 
