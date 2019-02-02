@@ -190,11 +190,11 @@ def main():
     word_counts = corpus_info.word_counts
     char_counts = corpus_info.char_counts
 
-    text_mapper = TextMapper(word_counts=word_counts, char_counts=char_counts, word_threshold=10, max_word_len=20,
-                             char_threshold=350, max_sent_len=100, nlp=nlp, word_lowercase=True, char_lowercase=True)
+    text_mapper = TextMapper(word_counts=word_counts, char_counts=char_counts, word_threshold=10, max_word_len=12,
+                             char_threshold=350, max_sent_len=50, nlp=nlp, word_lowercase=True, char_lowercase=True)
 
     word_vocab = text_mapper.get_words_vocab()
-    # embeddings = load_embeddings(word_vocab, embedding_files)
+    embeddings = load_embeddings(word_vocab, embedding_files)
     # save_unknown_words(data, embeddings, max_words=200)
     # models_all = list()
     # for model in config.get('models'):
@@ -205,13 +205,13 @@ def main():
     #                                      model_config=model.get('args')))
 
     model = BiLSTMCharCNNModel(data=data, corpus_info=corpus_info, text_mapper=text_mapper, batch_size=32)
-    # model.blend_embeddings(embeddings)
+    model.blend_embeddings(embeddings)
     model.define_model()
     model.fit()
 
     cleanup_models([model])  # embedding/memory cleanup
 
-    preds = model.predict(subset='test')
+    val_preds = model.predict_subset(subset='val')
 
     # ensemble_cv = Ensemble(m odels_all)
     # train_X = [data.train_X]
@@ -225,12 +225,14 @@ def main():
     # find the best threshold
 
     # pred_train_y = ensemble_cv.predict_linear_regression(train_X, data.train_y, train_X)
-    # thresh = find_best_threshold(pred_train_y, data.train_y)
+    val_y = np.array(data.val_labels)
+    thresh = find_best_threshold(val_preds, val_y)
 
     # pred_val_y = ensemble_cv.predict_linear_regression(train_X, data.train_y, val_X)
-    # print_diagnostics(data.val_y, (pred_val_y > thresh).astype(int))
+    print_diagnostics(val_y, (val_preds > thresh).astype(int))
     # pred_y_test = ensemble_cv.predict_linear_regression(train_X, data.train_y, test_X)
-    # write_predictions(data, pred_y_test, thresh)
+    pred_y_test = model.predict_subset('test')
+    write_predictions(data, pred_y_test, thresh)
 
 
 if __name__ == "__main__":

@@ -256,7 +256,8 @@ class InsincereModelV2:
         #                               save_best_only=config.get('checkpoint').get('save_best_only'))
         early_stop = EarlyStopping(monitor=config.get('early_stopping').get('monitor'),
                                    mode=config.get('early_stopping').get('mode'),
-                                   patience=config.get('early_stopping').get('patience'),
+                                   patience=1,
+                                   # patience=config.get('early_stopping').get('patience'),
                                    verbose=config.get('early_stopping').get('verbose'),
                                    restore_best_weights=True)
         return [early_stop]
@@ -265,16 +266,14 @@ class InsincereModelV2:
         logging.info("Fitting model...")
         config = self.config.get('fit')
 
-        train_input = self.text_mapper.texts_to_x(self.data.train_qs)
-        val_input = self.text_mapper.texts_to_x(self.data.val_qs)
+        train_questions = self.data.train_qs
+        val_questions = self.data.val_qs
 
-        train_words_input = train_input['words_input']
-        train_chars_input = train_input['chars_input']
-        val_words_input = val_input['words_input']
-        val_chars_input = val_input['chars_input']
+        train_x = self.prepare_model_inputs(train_questions)
+        val_x = self.prepare_model_inputs(val_questions)
 
-        train_labels = np.array(self.data.train_labels)
-        val_labels = np.array(self.data.val_labels)
+        train_y = np.array(self.data.train_labels)
+        val_y = np.array(self.data.val_labels)
 
         # train_generator = DataGenerator(text=self.data.train_qs, labels=self.data.train_labels,
         #                                 text_mapper=self.text_mapper, batch_size=self.batch_size)
@@ -283,13 +282,11 @@ class InsincereModelV2:
 
         callbacks = self._get_callbacks(config.get('epochs'), config.get('batch_size'))
 
-        self.history = self.model.fit(x={'words_input': train_words_input, 'chars_input': train_chars_input},
-                                      y=train_labels,
-                                      epochs=10,
+        self.history = self.model.fit(x=train_x,
+                                      y=train_y,
+                                      epochs=2,
                                       batch_size=32,
-                                      validation_data=({'words_input': val_words_input,
-                                                        'chars_input': val_chars_input},
-                                                       val_labels),
+                                      validation_data=(val_x, val_y),
                                       callbacks=callbacks)
 
         if config.get('save_curve'):
@@ -302,18 +299,18 @@ class InsincereModelV2:
             filename += '.png'
             self.print_curve(filename)
 
-    def predict(self, subset='train'):
-        logging.info("Model Predicting...")
-        if subset=='train':
-            data = self.data.train_qs
-        elif subset=='val':
-            data = self.data.val_qs
-        elif subset=='test':
-            data = self.data.get_questions(subset)
+    def predict_subset(self, subset='train'):
+        if subset == 'train':
+            questions = self.data.train_qs
+        elif subset == 'val':
+            questions = self.data.val_qs
+        elif subset == 'test':
+            questions = self.data.get_questions(subset)
 
-        data_generator = DataGenerator(text=data, )
+        input_x = self.prepare_model_inputs(questions)
+        preds = self.predict(input_x)
 
-        return
+        return preds
 
     def print_curve(self, filename='training_curve.png'):
         plt.plot(self.history.history['loss'])
@@ -334,3 +331,9 @@ class InsincereModelV2:
 
     def cleanup(self):
         self.embedding.cleanup()
+
+    def prepare_model_inputs(self, questions):
+        model_input = self.text_mapper.texts_to_x(questions)
+        words_input = model_input['words_input']
+        chars_input = model_input['chars_input']
+        return {'words_input': words_input, 'chars_input': chars_input}
