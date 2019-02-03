@@ -1,5 +1,7 @@
 import numpy as np
 import string
+from keras.preprocessing.text import text_to_word_sequence
+
 
 class TextMapper:
     """ Maps text into model input x """
@@ -31,9 +33,11 @@ class TextMapper:
         chars_feats_x = np.zeros((self.max_sent_len, self.max_word_len, self.char_mapper.num_add_feats))
 
         tokenized_question = self.nlp(text)
+        # tokenized_question = text_to_word_sequence(text, lower=False)
 
         for word_ind, token in enumerate(tokenized_question[:self.max_sent_len]):
             word = token.text
+            # word = token
             words_x[word_ind] = self.word_mapper.get_symbol_index(word)
             for char_ind, char in enumerate(word[:self.max_word_len]):
                 chars_x[word_ind][char_ind] = self.char_mapper.get_symbol_index(char)
@@ -168,8 +172,8 @@ class CharMapper(SymbolMapper):
 
     def __init__(self, char_counts, threshold, max_word_len, char_lowercase):
         super().__init__(char_counts, threshold, max_word_len, char_lowercase)
-        self.num_add_feats = 3
-        self.puncutation_list = string.punctuation
+        self.num_add_feats = 2
+        # self.puncutation_list = string.punctuation
 
     def print_coverage_statistics(self, symbols_name='chars'):
         super().print_coverage_statistics(symbols_name)
@@ -180,6 +184,6 @@ class CharMapper(SymbolMapper):
             add_feats[0] = 1
         if char.isdigit():
             add_feats[1] = 1
-        if char in self.puncutation_list:
-            add_feats[2] = 1
+        # if char in self.puncutation_list:
+        #     add_feats[2] = 1
         return add_feats

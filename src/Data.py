@@ -1,5 +1,5 @@
 from keras.preprocessing.sequence import pad_sequences
-from keras.preprocessing.text import Tokenizer
+from keras.preprocessing.text import text_to_word_sequence
 from nltk.corpus import stopwords
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
@@ -112,9 +112,11 @@ class CorpusInfo:
 
         for question in questions:
             tokenized_question = self.nlp(question)
+            # tokenized_question = text_to_word_sequence(question, lower=False)
             self.sent_lengths.append(len(tokenized_question))
             for token in tokenized_question:
                 text = token.text
+                # text = token
                 self.word_lengths.append(len(text))
                 word_to_count = text.lower() if self.word_lowercase else text
                 word_counters[word_to_count] += 1
