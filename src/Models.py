@@ -107,8 +107,8 @@ def char_level_feature_model(char_input, char_feat_input, max_word_len, char_voc
         conv_outputs.append(x)
     char_convs_out = Concatenate()(conv_outputs)
     x = Dense(100)(char_convs_out)
-    x = Dropout(0.3)
-    x = Dense(50)
+    x = Dropout(0.3)(x)
+    x = Dense(50)(x)
     return x
 
 # dev_size = config.get('dev_size')
