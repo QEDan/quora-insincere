@@ -2,23 +2,16 @@ import keras.backend as K
 import logging
 import matplotlib.pyplot as plt
 import numpy as np
-from keras.callbacks import EarlyStopping
+from keras.callbacks import EarlyStopping, ModelCheckpoint
 
-from data_generator import DataGenerator
-from Embedding import Embedding
-from LRFinder import LRFinder
-from OneCycleLR import OneCycleLR
-from config import config_insincere_model
-
-from keras.backend.tensorflow_backend import set_session
-import tensorflow as tf
-config = tf.ConfigProto()
-config.gpu_options.allow_growth = True  # dynamically grow the memory used on the GPU
-config.log_device_placement = True  # to log device placement (on which device the operation ran)
-sess = tf.Session(config=config)
+from src.Embedding import Embedding
+from src.LRFinder import LRFinder
+from src.OneCycleLR import OneCycleLR
+from src.config import config_insincere_model
+from src.data_generator import DataGenerator
 
 
-class InsincereModelV2:
+class InsincereModel:
     def __init__(self, data, corpus_info, text_mapper, batch_size=16, name=None, loss='binary_crossentropy'):
         self.data = data
         self.corpus_info = corpus_info
@@ -90,37 +83,33 @@ class InsincereModelV2:
     def print(self):
         print(self.model.summary())
 
-    def _get_callbacks(self, epochs, batch_size):
+    def _get_callbacks(self, epochs, batch_size, checkpoint=False, one_cycle=False):
         config = self.config.get('callbacks')
-        num_samples = len(self.data.train_qs)
-        # self.lr_finder = LRFinder(num_samples, batch_size)
-        # lr_manager = OneCycleLR(num_samples, epochs, batch_size)
-        # check_point = ModelCheckpoint('model.hdf5',
-        #                               monitor=config.get('checkpoint').get('monitor'),
-        #                               mode=config.get('checkpoint').get('mode'),
-        #                               verbose=config.get('checkpoint').get('verbose'),
-        #                               save_best_only=config.get('checkpoint').get('save_best_only'))
         early_stop = EarlyStopping(monitor=config.get('early_stopping').get('monitor'),
                                    mode=config.get('early_stopping').get('mode'),
-                                   patience=1,
-                                   # patience=config.get('early_stopping').get('patience'),
+                                   patience=config.get('early_stopping').get('patience'),
                                    verbose=config.get('early_stopping').get('verbose'),
                                    restore_best_weights=True)
-        return [early_stop]
+        cbs = [early_stop]
+        if one_cycle:
+            num_samples = len(self.data.train_qs)
+            self.lr_finder = LRFinder(num_samples, batch_size)
+            lr_manager = OneCycleLR(num_samples, epochs, batch_size)
+            cbs += [self.lr_finder, lr_manager]
+        if checkpoint:
+            check_point = ModelCheckpoint('model.hdf5',
+                                          monitor=config.get('checkpoint').get('monitor'),
+                                          mode=config.get('checkpoint').get('mode'),
+                                          verbose=config.get('checkpoint').get('verbose'),
+                                          save_best_only=config.get('checkpoint').get('save_best_only'))
+            cbs += [check_point]
+
+        return cbs
 
     def fit(self, curve_file_suffix=None):
         logging.info("Fitting model...")
         self.model.summary()
         config = self.config.get('fit')
-
-        # train_questions = self.data.train_qs
-        # val_questions = self.data.val_qs
-        #
-        # train_x = self.prepare_model_inputs(train_questions)
-        # val_x = self.prepare_model_inputs(val_questions)
-        #
-        # train_y = np.array(self.data.train_labels)
-        # val_y = np.array(self.data.val_labels)
 
         train_generator = DataGenerator(text=self.data.train_qs, labels=self.data.train_labels,
                                         text_mapper=self.text_mapper, batch_size=self.batch_size)
@@ -144,7 +133,8 @@ class InsincereModelV2:
         #                               callbacks=callbacks)
 
         if config.get('save_curve'):
-            # self.lr_finder.plot_schedule(filename="lr_schedule_" + str(self.name) + ".png")
+            if self.lr_finder:
+                self.lr_finder.plot_schedule(filename="lr_schedule_" + str(self.name) + ".png")
             filename = 'training_curve'
             if self.name:
                 filename += '_' + self.name

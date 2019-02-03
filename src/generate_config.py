@@ -63,13 +63,7 @@ config_main = {'embedding_files': [# '../input/embeddings/GoogleNews-vectors-neg
                                    # '../input/embeddings/wiki-news-300d-1M/wiki-news-300d-1M.vec',
                                    '../input/embeddings/paragram_300_sl999/paragram_300_sl999.txt'
                                   ],
-                'dev_size': 500,
-                'models': [{'class': 'LSTMModelAttention',
-                           'args': None
-                            },
-                           {'class': 'CNNModel',
-                            'args': None}
-                           ]
+                'dev_size': 500
               }
 
 

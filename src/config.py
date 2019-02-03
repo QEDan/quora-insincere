@@ -3,8 +3,8 @@
 
 random_state = 2018
 
-config_data = {'max_feature': 200000,
- 'max_seq_len': 50,
+config_data = {'max_feature': 50000,
+ 'max_seq_len': 200,
  'preprocess': {'correct_spelling': True,
                 'lower_case': False,
                 'remove_contractions': True,
@@ -22,18 +22,18 @@ config_insincere_model = {'callbacks': {'checkpoint': {'mode': 'max',
                               'verbose': True},
                'early_stopping': {'mode': 'max',
                                   'monitor': 'val_f1_score',
-                                  'patience': 2,
+                                  'patience': 5,
                                   'verbose': True}},
- 'fit': {'batch_size': 1536,
+ 'fit': {'batch_size': 1000,
          'epochs': 5,
          'pseudo_labels': False,
          'save_curve': True},
- 'predict': {'batch_size': 2048, 'verbose': True}}
+ 'predict': {'batch_size': 1024, 'verbose': True}}
 
 config_lrfinder = {'loss_smoothing_beta': 0.98,
  'lr_scale': 'exp',
  'maximum_lr': 10.0,
- 'minimum_lr': 1e-06,
+ 'minimum_lr': 1e-05,
  'save_dir': None,
  'stopping_criterion_factor': 4,
  'validation_sample_rate': 5,
@@ -48,7 +48,5 @@ config_one_cycle = {'end_percentage': 0.1,
 
 config_main = {'dev_size': None,
  'embedding_files': ['../input/embeddings/glove.840B.300d/glove.840B.300d.txt',
-                     '../input/embeddings/paragram_300_sl999/paragram_300_sl999.txt'],
- 'models': [{'args': None, 'class': 'LSTMModelAttention'},
-            {'args': None, 'class': 'CNNModel'}]}
+                     '../input/embeddings/paragram_300_sl999/paragram_300_sl999.txt']}
 

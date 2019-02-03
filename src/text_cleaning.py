@@ -1,8 +1,6 @@
+import re
 from nltk.corpus import stopwords
 
-import pandas as pd
-
-import re
 
 def remove_stops(sentence):
     """ Should apply only after tokenization """

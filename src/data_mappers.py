@@ -140,23 +140,29 @@ class SymbolMapper:
     def get_vocab_len(self):
         return len(self.symbol_to_ix)
 
-    def print_coverage_statistics(self, symbols_name='symbol'):
+    def print_coverage_statistics(self, symbols_name='symbol', persist=True):
         """
         Simple metric on coverage of symbols
 
         :param symbols_name: str, printed to distinguish different mappers
+        :param persist: bool, write stats to file rather than stdout
         """
         symbol_mappings = self.symbol_to_ix.keys()
-        print("Number of unique {}: {}".format(symbols_name, len(self.symbol_counts)))
-        print("Number of unique {} mapped: {}".format(symbols_name, len(symbol_mappings)))
-        total_tokens = 0
-        mapped_tokens = 0
-        for symbol, count in self.symbol_counts:
-            total_tokens += count
-            if symbol in symbol_mappings:
-                mapped_tokens += count
-        print("Percent of unique symbols mapped: {}%".format(100 * len(symbol_mappings) / len(self.symbol_counts)))
-        print("Percent of total symbols mapped: {}%".format(100 * mapped_tokens / total_tokens))
+        with open('coverage_stats.txt', 'w') if persist else None as f:
+            print("Number of unique {}: {}".format(symbols_name, len(self.symbol_counts)), file=f)
+            print("Number of unique {} mapped: {}".format(symbols_name, len(symbol_mappings)), file=f)
+            total_tokens = 0
+            mapped_tokens = 0
+            for symbol, count in self.symbol_counts:
+                total_tokens += count
+                if symbol in symbol_mappings:
+                    mapped_tokens += count
+            print("Percent of unique symbols mapped: {}%".format(
+                100 * len(symbol_mappings) / len(self.symbol_counts)),
+                file=f)
+            print("Percent of total symbols mapped: {}%".format(
+                100 * mapped_tokens / total_tokens),
+                file=f)
 
 
 class WordMapper(SymbolMapper):
