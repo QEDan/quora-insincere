@@ -87,7 +87,7 @@ class InsincereModel:
         config = self.config.get('callbacks')
         early_stop = EarlyStopping(monitor=config.get('early_stopping').get('monitor'),
                                    mode=config.get('early_stopping').get('mode'),
-                                   patience=config.get('early_stopping').get('patience'),
+                                   patience=1,
                                    verbose=config.get('early_stopping').get('verbose'),
                                    restore_best_weights=True)
         cbs = [early_stop]
@@ -118,10 +118,10 @@ class InsincereModel:
 
         callbacks = self._get_callbacks(config.get('epochs'), config.get('batch_size'))
 
-        self.model.fit_generator(generator=train_generator, epochs=3, verbose=1, callbacks=callbacks,
-                                 validation_data=val_generator, max_queue_size=10000,  # why not make this >>>
-                                 workers=2,
-                                 use_multiprocessing=True,
+        self.model.fit_generator(generator=train_generator, epochs=10, verbose=1, callbacks=callbacks,
+                                 validation_data=val_generator, max_queue_size=10,  # why not make this >>>
+                                 workers=1,
+                                 use_multiprocessing=False,
                                  shuffle=True)
 
 
@@ -154,7 +154,7 @@ class InsincereModel:
         # input_x = self.prepare_model_inputs(questions)
         # preds = self.predict(input_x)
         data_gen = DataGenerator(text=questions, text_mapper=self.text_mapper, shuffle=False)
-        preds = self.model.predict_generator(data_gen, workers=2, use_multiprocessing=True, max_queue_size=1000)
+        preds = self.model.predict_generator(data_gen, workers=2, use_multiprocessing=True, max_queue_size=100)
         return preds
 
     def print_curve(self, filename='training_curve.png'):

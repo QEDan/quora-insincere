@@ -8,7 +8,7 @@ matplotlib.use('Agg')
 from src.Models import *  # Make all models available for easy script generation.
 
 from keras.layers import TimeDistributed, Embedding as EmbeddingLayer, Bidirectional, CuDNNLSTM, Dense, Conv1D
-from keras.layers import GlobalMaxPooling1D, Concatenate
+from keras.layers import GlobalMaxPooling1D, Concatenate, BatchNormalization, Dropout
 
 
 class BiLSTMCharCNNModel(InsincereModel):
@@ -101,12 +101,15 @@ def char_level_feature_model(char_input, char_feat_input, max_word_len, char_voc
     conv_kernels = [[32, 2], [32, 3], [32, 4]]
     for num_filter, kernel_size in conv_kernels:
         char_conv = TimeDistributed(Conv1D(filters=num_filter, kernel_size=kernel_size))(char_rep)
+        batch_norm = TimeDistributed(BatchNormalization())(char_conv)
         # todo: add dropout or batchnorm here? global average pooling?
-        x = TimeDistributed(GlobalMaxPooling1D())(char_conv)
+        x = TimeDistributed(GlobalMaxPooling1D())(batch_norm)
         conv_outputs.append(x)
-    char_features_rep = Concatenate()(conv_outputs)
-    # todo: add dense layers here to better represent character features
-    return char_features_rep
+    char_convs_out = Concatenate()(conv_outputs)
+    x = Dense(100)(char_convs_out)
+    x = Dropout(0.3)
+    x = Dense(50)
+    return x
 
 # dev_size = config.get('dev_size')
 # data = DataV2()

@@ -1,7 +1,6 @@
 import keras
 
 import numpy as np
-import math
 
 
 class DataGenerator(keras.utils.Sequence):
@@ -17,7 +16,7 @@ class DataGenerator(keras.utils.Sequence):
 
     def __len__(self):
         """Denotes the number of batches per epoch"""
-        return math.ceil(len(self.text) / self.batch_size)
+        return int(np.ceil(len(self.text) / self.batch_size))
 
     def __getitem__(self, index):
         """Generate one batch of data

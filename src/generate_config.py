@@ -61,7 +61,7 @@ config_one_cycle = {'end_percentage': 0.1,
 config_main = {'embedding_files': [# '../input/embeddings/GoogleNews-vectors-negative300/GoogleNews-vectors-negative300.bin',
                                    '../input/embeddings/glove.840B.300d/glove.840B.300d.txt',
                                    # '../input/embeddings/wiki-news-300d-1M/wiki-news-300d-1M.vec',
-                                   '../input/embeddings/paragram_300_sl999/paragram_300_sl999.txt'
+                                   # '../input/embeddings/paragram_300_sl999/paragram_300_sl999.txt'
                                   ],
                 'dev_size': 500
               }

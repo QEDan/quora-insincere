@@ -10,6 +10,8 @@ import pandas as pd
 import random
 import tensorflow as tf
 import spacy
+import pickle
+import os
 
 from sklearn import metrics
 from sklearn.metrics import precision_recall_curve
@@ -183,13 +185,20 @@ from pympler import asizeof
 def main():
     embedding_files = config.get('embedding_files')
     dev_size = config.get('dev_size')
-    dev_size = 500
+    # dev_size = 50000
     data = Data()
     data.load(dev_size)
     data.split()
 
     nlp = spacy.load('en', disable=['parser', 'tagger', 'ner'])
-    corpus_info = CorpusInfo(data.get_questions(subset='train'), nlp)
+
+    corpus_info_pickle = '/home/matt/ci.p'
+    if os.path.isfile(corpus_info_pickle):
+        corpus_info = pickle.load(open(corpus_info_pickle, 'rb'))
+    else:
+        corpus_info = CorpusInfo(data.get_questions(subset='train'), nlp)
+        pickle.dump(corpus_info, open(corpus_info_pickle, 'wb'))
+
     word_counts = corpus_info.word_counts
     char_counts = corpus_info.char_counts
 
@@ -197,7 +206,14 @@ def main():
                              char_threshold=350, max_sent_len=50, nlp=nlp, word_lowercase=True, char_lowercase=True)
 
     word_vocab = text_mapper.get_words_vocab()
-    # embeddings = load_embeddings(word_vocab, embedding_files)
+
+    embedding_pickle = '/home/matt/emb.p'
+    if os.path.isfile(embedding_pickle):
+        embeddings = pickle.load(open(embedding_pickle, 'rb'))
+    else:
+        embeddings = load_embeddings(word_vocab, embedding_files)
+        pickle.dump(embeddings, open(embedding_pickle, 'wb'))
+
     # save_unknown_words(data, embeddings, max_words=200)
     # models_all = list()
     # for model in config.get('models'):
@@ -208,7 +224,8 @@ def main():
     #                                      model_config=model.get('args')))
 
     model = BiLSTMCharCNNModel(data=data, corpus_info=corpus_info, text_mapper=text_mapper, batch_size=128)
-    # model.blend_embeddings(embeddings)
+    model.blend_embeddings(embeddings)
+
     model.define_model()
     model.fit()
 

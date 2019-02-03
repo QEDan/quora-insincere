@@ -149,8 +149,8 @@ class SymbolMapper:
         """
         symbol_mappings = self.symbol_to_ix.keys()
         with open('coverage_stats.txt', 'w') if persist else None as f:
-            print("Number of unique {}: {}".format(symbols_name, len(self.symbol_counts)), file=f)
-            print("Number of unique {} mapped: {}".format(symbols_name, len(symbol_mappings)), file=f)
+            print("Number of unique {}: {}".format(symbols_name, len(self.symbol_counts)))
+            print("Number of unique {} mapped: {}".format(symbols_name, len(symbol_mappings)))
             total_tokens = 0
             mapped_tokens = 0
             for symbol, count in self.symbol_counts:
@@ -158,11 +158,9 @@ class SymbolMapper:
                 if symbol in symbol_mappings:
                     mapped_tokens += count
             print("Percent of unique symbols mapped: {}%".format(
-                100 * len(symbol_mappings) / len(self.symbol_counts)),
-                file=f)
+                100 * len(symbol_mappings) / len(self.symbol_counts)))
             print("Percent of total symbols mapped: {}%".format(
-                100 * mapped_tokens / total_tokens),
-                file=f)
+                100 * mapped_tokens / total_tokens))
 
 
 class WordMapper(SymbolMapper):
