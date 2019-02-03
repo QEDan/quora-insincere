@@ -17,9 +17,9 @@ class TextMapper:
         """
         self.max_sent_len = max_sent_len
         self.max_word_len = max_word_len
-        self.word_mapper = WordMapper(word_counts=word_counts, threshold=word_threshold, max_sent_len=max_sent_len,
+        self.word_mapper = WordMapper(word_counts=word_counts, threshold=word_threshold,
                                       word_lowercase=word_lowercase)
-        self.char_mapper = CharMapper(char_counts=char_counts, threshold=char_threshold, max_word_len=max_word_len,
+        self.char_mapper = CharMapper(char_counts=char_counts, threshold=char_threshold,
                                       char_lowercase=char_lowercase)
 
         self.max_sent_len = max_sent_len
@@ -77,10 +77,10 @@ class TextMapper:
         return {"words_input": words_input, "chars_input": chars_input, "chars_feats_input": char_feats_input}
 
     def set_max_sentence_len(self, max_sent_len):
-        self.word_mapper.set_max_len(max_sent_len)
+        self.max_sent_len = max_sent_len
 
-    def set_max_char_len(self, max_char_len):
-        self.char_mapper.set_max_len(max_char_len)
+    def set_max_char_len(self, max_word_len):
+        self.max_word_len = max_word_len
 
     def get_words_vocab(self):
         return self.word_mapper.vocab
@@ -92,10 +92,9 @@ class SymbolMapper:
     UNKNOWN_SYMBOL = "<UNK>"
     BASE_ALPHABET = [PADDING_SYMBOL, UNKNOWN_SYMBOL]
 
-    def __init__(self, symbol_counts, threshold, max_len, lowercase):
+    def __init__(self, symbol_counts, threshold, lowercase):
         self.symbol_counts = symbol_counts
         self.threshold = threshold
-        self.max_len = max_len
         self.lowercase = lowercase
 
         self.vocab = []
@@ -118,9 +117,6 @@ class SymbolMapper:
     def set_threshold(self, threshold, check_coverage=True):
         self.threshold = threshold
         self.init_mappings(check_coverage)
-
-    def set_max_len(self, max_len):
-        self.max_len = max_len
 
     def print_top_n_symbols(self, n=10):
         print([(symbol, count) for symbol, count in self.symbol_counts if count >= self.threshold][:n])
@@ -165,8 +161,8 @@ class SymbolMapper:
 
 class WordMapper(SymbolMapper):
 
-    def __init__(self, word_counts, threshold, max_sent_len, word_lowercase):
-        super().__init__(word_counts, threshold, max_sent_len, word_lowercase)
+    def __init__(self, word_counts, threshold, word_lowercase):
+        super().__init__(word_counts, threshold, word_lowercase)
 
     def print_coverage_statistics(self, symbols_name='words'):
         super().print_coverage_statistics(symbols_name)
@@ -174,10 +170,9 @@ class WordMapper(SymbolMapper):
 
 class CharMapper(SymbolMapper):
 
-    def __init__(self, char_counts, threshold, max_word_len, char_lowercase):
-        super().__init__(char_counts, threshold, max_word_len, char_lowercase)
+    def __init__(self, char_counts, threshold, char_lowercase):
+        super().__init__(char_counts, threshold, char_lowercase)
         self.num_add_feats = 2
-        # self.puncutation_list = string.punctuation
 
     def print_coverage_statistics(self, symbols_name='chars'):
         super().print_coverage_statistics(symbols_name)

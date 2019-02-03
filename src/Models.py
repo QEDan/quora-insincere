@@ -116,8 +116,9 @@ class BiLSTMCharCNNModel(InsincereModel):
             regularized_word_embeddings = EmbeddingLayer(input_dim=word_vocab_size,
                                                          output_dim=matrix_shape[1],
                                                          input_length=max_sent_len,
-                                                         weights=np.zeros(matrix_shape),
-                                                         trainable=False)(words_input)
+                                                         weights=[np.zeros(matrix_shape)],
+                                                         embeddings_regularizer=regularizers.l2(),
+                                                         trainable=True)(words_input)
             words_embedding = Add()([un_trainable_words_embedding, regularized_word_embeddings])
             word_rep = Concatenate()([char_features, words_embedding, trainable_words_embedding])
         else:

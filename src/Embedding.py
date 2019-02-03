@@ -62,14 +62,17 @@ class Embedding:
         self.embed_size = all_embs.shape[1]
 
         self.nb_words = len(self.word_vocab)
-        self.embedding_matrix = np.random.normal(emb_mean, emb_std, (self.nb_words, self.embed_size))
+        self.embedding_matrix = np.zeros((self.nb_words, self.embed_size))
         for ind, word in enumerate(self.word_vocab):
-            # todo: freezing pre-trained embeddings and unfreezing these unknown, random word embeddings
-            embedding_vector = self.embeddings_index.get(word)
+            if word == '<UNK>':
+                embedding_vector = np.random.normal(emb_mean, emb_std, (1, self.embed_size))[0]
+            else:
+                embedding_vector = self.embeddings_index.get(word)
             if embedding_vector is not None:
                 self.embedding_matrix[ind] = embedding_vector
             else:
                 self.unknown_words.append(word)
+        # self.cleanup_index()
 
     def get_embedding_matrix(self):
         return self.embedding_matrix
