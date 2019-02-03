@@ -182,8 +182,7 @@ def save_configs():
     logging.info('Configurations: ')
     logging.info(pprint(config_dict))
 
-import sys
-from pympler import asizeof
+
 def main():
 
     embedding_files = config.get('embedding_files')
@@ -195,17 +194,26 @@ def main():
 
     nlp = spacy.load('en', disable=['parser', 'tagger', 'ner'])
 
-    corpus_info = CorpusInfo(data.get_questions(subset='train'), nlp)
+    ci_path = '/home/matt/ci.p'
+    if os.path.isfile(ci_path):
+        corpus_info = pickle.load(open(ci_path, 'rb'))
+    else:
+        corpus_info = CorpusInfo(data.get_questions(subset='train'), nlp)
+        pickle.dump(corpus_info, open(ci_path, 'wb'))
 
     word_counts = corpus_info.word_counts
     char_counts = corpus_info.char_counts
 
-    text_mapper = TextMapper(word_counts=word_counts, char_counts=char_counts, word_threshold=10, max_word_len=12,
+    text_mapper = TextMapper(word_counts=word_counts, char_counts=char_counts, word_threshold=5, max_word_len=12,
                              char_threshold=350, max_sent_len=70, nlp=nlp, word_lowercase=True, char_lowercase=True)
 
     word_vocab = text_mapper.get_words_vocab()
-
-    embeddings = load_embeddings(word_vocab, embedding_files)
+    emb_path = '/home/matt/emb.p'
+    if True:
+        embeddings = pickle.load(open(emb_path, 'rb'))
+    else:
+        embeddings = load_embeddings(word_vocab, embedding_files)
+        pickle.dump(embeddings, open(emb_path, 'wb'))
 
     unknown_word_models = [UnknownWords(text_mapper, embedding) for embedding in embeddings]
     for model in unknown_word_models:
@@ -253,17 +261,17 @@ def main():
     write_predictions(data, pred_y_test, thresh)
 
 
-if __name__ == "__main__":
-    logging.getLogger()
-    logging.basicConfig(
-        format='%(asctime)s %(levelname)-8s %(message)s',
-        level=logging.DEBUG,
-        datefmt='%Y-%m-%d %H:%M:%S')
-    save_configs()
-    config_tf = tf.ConfigProto()
-    config_tf.gpu_options.allow_growth = True  # dynamically grow the memory used on the GPU
-    config_tf.log_device_placement = True  # to log device placement (on which device the operation ran)
-    sess = tf.Session(config=config_tf)
-    main()
-    sess.close()
-    logging.info("Done!")
+# if __name__ == "__main__":
+#     logging.getLogger()
+#     logging.basicConfig(
+#         format='%(asctime)s %(levelname)-8s %(message)s',
+#         level=logging.DEBUG,
+#         datefmt='%Y-%m-%d %H:%M:%S')
+#     save_configs()
+#     config_tf = tf.ConfigProto()
+#     config_tf.gpu_options.allow_growth = True  # dynamically grow the memory used on the GPU
+#     config_tf.log_device_placement = True  # to log device placement (on which device the operation ran)
+#     sess = tf.Session(config=config_tf)
+#     main()
+#     sess.close()
+#     logging.info("Done!")

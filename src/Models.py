@@ -103,9 +103,6 @@ class BiLSTMCharCNNModel(InsincereModel):
         char_features = char_level_feature_model(chars_input, char_feats_input, max_word_len, char_vocab_size)
 
         words_input = Input(shape=(max_sent_len,), name='words_input', dtype='int64')
-
-        trainable_words_embedding = EmbeddingLayer(input_dim=word_vocab_size, output_dim=30,
-                                                   input_length=max_sent_len)(words_input)
         matrix_shape = self.embedding.embedding_matrix.shape
         if self.embedding is not None:
             un_trainable_words_embedding = EmbeddingLayer(input_dim=word_vocab_size,
@@ -113,12 +110,15 @@ class BiLSTMCharCNNModel(InsincereModel):
                                                           input_length=max_sent_len,
                                                           weights=[self.embedding.embedding_matrix],
                                                           trainable=False)(words_input)
-            regularized_word_embeddings = EmbeddingLayer(input_dim=word_vocab_size,
-                                                         output_dim=matrix_shape[1],
-                                                         input_length=max_sent_len,
-                                                         weights=np.zeros(matrix_shape),
-                                                         trainable=False)(words_input)
-            words_embedding = Add()([un_trainable_words_embedding, regularized_word_embeddings])
+            if True:
+                regularized_word_embeddings = EmbeddingLayer(input_dim=word_vocab_size,
+                                                             output_dim=matrix_shape[1],
+                                                             input_length=max_sent_len,
+                                                             weights=np.zeros(matrix_shape),
+                                                             trainable=False)(words_input)
+                words_embedding = Add()([un_trainable_words_embedding, regularized_word_embeddings])
+            else:
+                words_embedding = un_trainable_words_embedding
             word_rep = Concatenate()([char_features, words_embedding, trainable_words_embedding])
         else:
             word_rep = Concatenate()([char_features, trainable_words_embedding])
