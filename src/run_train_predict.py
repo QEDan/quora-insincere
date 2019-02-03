@@ -183,6 +183,7 @@ def save_configs():
 import sys
 from pympler import asizeof
 def main():
+
     embedding_files = config.get('embedding_files')
     dev_size = config.get('dev_size')
     # dev_size = 50000
@@ -203,7 +204,7 @@ def main():
     char_counts = corpus_info.char_counts
 
     text_mapper = TextMapper(word_counts=word_counts, char_counts=char_counts, word_threshold=10, max_word_len=12,
-                             char_threshold=350, max_sent_len=50, nlp=nlp, word_lowercase=True, char_lowercase=True)
+                             char_threshold=350, max_sent_len=70, nlp=nlp, word_lowercase=True, char_lowercase=True)
 
     word_vocab = text_mapper.get_words_vocab()
 

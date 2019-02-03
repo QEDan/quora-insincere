@@ -118,7 +118,11 @@ class InsincereModel:
 
         callbacks = self._get_callbacks(config.get('epochs'), config.get('batch_size'))
 
-        self.model.fit_generator(generator=train_generator, epochs=10, verbose=1, callbacks=callbacks,
+        # batch_size = [32, 64, 128, 256]
+        # todo: write this in a for loop and change batch size, learning rate, and epsilon (K.set_epsilon(1e-2))
+        # for i in range(4):
+        #     train_generator.batch_size = batch_size[i]
+        self.model.fit_generator(generator=train_generator, epochs=5, verbose=1, callbacks=callbacks,
                                  validation_data=val_generator, max_queue_size=10,  # why not make this >>>
                                  workers=1,
                                  use_multiprocessing=False,
@@ -154,7 +158,7 @@ class InsincereModel:
         # input_x = self.prepare_model_inputs(questions)
         # preds = self.predict(input_x)
         data_gen = DataGenerator(text=questions, text_mapper=self.text_mapper, shuffle=False)
-        preds = self.model.predict_generator(data_gen, workers=2, use_multiprocessing=True, max_queue_size=100)
+        preds = self.model.predict_generator(data_gen, workers=1, use_multiprocessing=True, max_queue_size=10)
         return preds
 
     def print_curve(self, filename='training_curve.png'):

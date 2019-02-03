@@ -44,17 +44,13 @@ class Data:
         questions = questions.fillna("_na_")
         preprocess_config = config_data.get('preprocess')
         case_sensitive = not preprocess_config.get('lower_case')
-        if preprocess_config.get('lower_case'):
-            questions = questions.str.lower()
         # trouble removing stop words before we have tokenized the text, this has to happen later
         # if preprocess_config.get('remove_stop_words'):
             # questions = questions.apply(remove_stops)
-        if preprocess_config.get('remove_contractions'):
-            questions = questions.apply(lambda x: clean_contractions(x))
         if preprocess_config.get('remove_specials'):
             questions = questions.apply(lambda x: clean_specials(x))
-        if preprocess_config.get('correct_spelling'):
-            questions = questions.apply(lambda x: clean_spelling(x, case_sensitive=case_sensitive))
+        # if preprocess_config.get('correct_spelling'):
+        #     questions = questions.apply(lambda x: clean_spelling(x, case_sensitive=case_sensitive))
         if preprocess_config.get('replace_acronyms'):
             questions = questions.apply(lambda x: clean_acronyms(x, case_sensitive=case_sensitive))
         if preprocess_config.get('replace_non_words'):
