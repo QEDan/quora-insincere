@@ -179,7 +179,8 @@ def save_configs():
     logging.info('Configurations: ')
     logging.info(pprint(config_dict))
 
-
+import sys
+from pympler import asizeof
 def main():
     embedding_files = config.get('embedding_files')
     dev_size = config.get('dev_size')
@@ -235,12 +236,12 @@ def main():
     write_predictions(data, pred_y_test, thresh)
 
 
-if __name__ == "__main__":
-    logging.getLogger()
-    logging.basicConfig(
-        format='%(asctime)s %(levelname)-8s %(message)s',
-        level=logging.DEBUG,
-        datefmt='%Y-%m-%d %H:%M:%S')
-    save_configs()
-    main()
-    logging.info("Done!")
+# if __name__ == "__main__":
+#     logging.getLogger()
+#     logging.basicConfig(
+#         format='%(asctime)s %(levelname)-8s %(message)s',
+#         level=logging.DEBUG,
+#         datefmt='%Y-%m-%d %H:%M:%S')
+#     save_configs()
+#     main()
+#     logging.info("Done!")

@@ -141,12 +141,12 @@ class CNNModel(InsincereModel):
 from keras.layers import TimeDistributed, LSTM
 from keras.layers import Dropout, GlobalMaxPooling1D, Concatenate
 
+
 class BiLSTMCharCNNModel(InsincereModelV2):
 
     def define_model(self, model_config=None):
         # if model_config is None:
         #     model_config = self.default_config()
-
 
         max_sent_len = self.text_mapper.max_sent_len
         max_word_len = self.text_mapper.max_word_len
@@ -154,8 +154,9 @@ class BiLSTMCharCNNModel(InsincereModelV2):
         char_vocab_size = self.text_mapper.char_mapper.get_vocab_len()
 
         chars_input = Input(shape=(max_sent_len, max_word_len), name='chars_input', dtype='int64')
-
-        char_features = char_level_feature_model(chars_input, max_word_len, char_vocab_size)
+        char_feats_input = Input(shape=(max_sent_len, max_word_len, self.text_mapper.char_mapper.num_add_feats),
+                                 name='chars_feats_input', dtype='float32')
+        char_features = char_level_feature_model(chars_input, char_feats_input, max_word_len, char_vocab_size)
 
         words_input = Input(shape=(max_sent_len,), name='words_input', dtype='int64')
         if self.embedding is not None:
@@ -180,7 +181,7 @@ class BiLSTMCharCNNModel(InsincereModelV2):
         # x = Flatten()(char_sum)
         preds = Dense(1, activation='sigmoid')(x)
 
-        inputs = [chars_input, words_input]
+        inputs = [chars_input, words_input, char_feats_input]
 
         self.model = Model(inputs=inputs, outputs=preds)
         self.model.compile(loss=self.loss, optimizer='adam', metrics=['accuracy', self.f1_score])
@@ -234,14 +235,17 @@ class CharCNNWordModel(InsincereModelV2):
     #     char_embedding = EmbeddingLayer(inpu_dim)
 
 
-def char_level_feature_model(input_layer, max_word_len, char_vocab_size):
-    chars_words_embedding = TimeDistributed(EmbeddingLayer(char_vocab_size, output_dim=16, input_length=max_word_len))(input_layer)
+def char_level_feature_model(char_input, char_feat_input, max_word_len, char_vocab_size):
+    chars_words_embedding = TimeDistributed(EmbeddingLayer(char_vocab_size,
+                                                           output_dim=16,
+                                                           input_length=max_word_len))(char_input)
     # todo: add additional char features here
+    char_rep = Concatenate()([chars_words_embedding, char_feat_input])
     conv_outputs = []
     # todo: tune these conv kernels
     conv_kernels = [[32, 2], [32, 3], [32, 4]]
     for num_filter, kernel_size in conv_kernels:
-        char_conv = TimeDistributed(Conv1D(filters=num_filter, kernel_size=kernel_size))(chars_words_embedding)
+        char_conv = TimeDistributed(Conv1D(filters=num_filter, kernel_size=kernel_size))(char_rep)
         # todo: add dropout or batchnorm here? global average pooling?
         x = TimeDistributed(GlobalMaxPooling1D())(char_conv)
         conv_outputs.append(x)
@@ -274,4 +278,4 @@ def char_level_feature_model(input_layer, max_word_len, char_vocab_size):
 # model = BiLSTMCharCNNModel(data, corpus_info, text_mapper)
 # model.define_model()
 # model.model.summary()
-# # # #
+# # # # #

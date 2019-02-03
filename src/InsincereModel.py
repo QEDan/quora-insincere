@@ -270,6 +270,7 @@ class InsincereModelV2:
 
     def fit(self, curve_file_suffix=None):
         logging.info("Fitting model...")
+        self.model.summary()
         config = self.config.get('fit')
 
         train_questions = self.data.train_qs
@@ -342,4 +343,5 @@ class InsincereModelV2:
         model_input = self.text_mapper.texts_to_x(questions)
         words_input = model_input['words_input']
         chars_input = model_input['chars_input']
-        return {'words_input': words_input, 'chars_input': chars_input}
+        char_feats_input = model_input['chars_feats_input']
+        return {'words_input': words_input, 'chars_input': chars_input, 'chars_feats_input': char_feats_input}
