@@ -16,6 +16,7 @@ class Embedding:
         self.embedding_matrix = None
         self.word_vocab = word_vocab
         self.name = None
+        self.unknown_words = list()
 
     def load(self, embedding_file='../input/embeddings/glove.840B.300d/glove.840B.300d.txt'):
         logging.info("loading embedding : " + embedding_file)
@@ -67,6 +68,8 @@ class Embedding:
             embedding_vector = self.embeddings_index.get(word)
             if embedding_vector is not None:
                 self.embedding_matrix[ind] = embedding_vector
+            else:
+                self.unknown_words.append(word)
 
     def get_embedding_matrix(self):
         return self.embedding_matrix

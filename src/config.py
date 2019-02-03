@@ -46,7 +46,7 @@ config_one_cycle = {'end_percentage': 0.1,
  'scale_percentage': None,
  'verbose': True}
 
-config_main = {'dev_size': None,
+config_main = {'dev_size': 500,
  'embedding_files': ['../input/embeddings/glove.840B.300d/glove.840B.300d.txt',
                      '../input/embeddings/paragram_300_sl999/paragram_300_sl999.txt']}
 

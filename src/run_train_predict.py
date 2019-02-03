@@ -2,6 +2,8 @@ import logging
 import matplotlib
 from pprint import pprint
 
+from src.UnknownWords import UnknownWords
+
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
@@ -196,6 +198,11 @@ def main():
 
     word_vocab = text_mapper.get_words_vocab()
     embeddings = load_embeddings(word_vocab, embedding_files)
+    unknown_word_models = [UnknownWords(text_mapper, embedding) for embedding in embeddings]
+    for model in unknown_word_models:
+        model.define_model()
+        model.fit(data.train_qs)
+        model.improve_embedding()
     # save_unknown_words(data, embeddings, max_words=200)
     # models_all = list()
     # for model in config.get('models'):

@@ -13,6 +13,10 @@ class TestEmbedding:
                                 'aab': np.array([1.0, 1.1, 1.1]),
                                 'aac': np.array([1.0, 1.1, 1.2])}
         self.embedding_matrix = np.array([self.embeddings_index[k] for k in self.embeddings_index.keys()])
+        self.embedding_matrix = np.vstack([self.embedding_matrix, np.zeros((2, 3))])
+        self.unknown_words = ['unk', 'unc']
+        self.embed_size = 3
+        self.word_vocab = ['aaa', 'aab', 'aac', 'unk', 'unc']
 
 
 class TestUnknownWords(unittest.TestCase):
@@ -28,11 +32,13 @@ class TestUnknownWords(unittest.TestCase):
 
     def test_define_model(self):
         model = self.unknown_words_model.define_model()
+
         self.assertTrue(type(model) == keras.Model)
 
     def test_sample_training_data(self):
         sentences = ['aaa aaa aab', 'aaa aab aab', 'aac aab aac']
         train_X, val_X, train_y, val_y = self.unknown_words_model.sample_training_data(sentences)
+
         self.assertGreater(len(train_X), 0)
         self.assertGreater(len(val_X), 0)
         self.assertGreater(len(train_y), 0)
@@ -52,5 +58,16 @@ class TestUnknownWords(unittest.TestCase):
         self.unknown_words_model.define_model()
         self.unknown_words_model.fit(sentences)
         preds = self.unknown_words_model.predict(['aad'])
+
         self.assertEqual(type(preds), np.ndarray)
         self.assertEqual(preds.shape, (1, 3))
+
+    def test_improve_embedding(self):
+        sentences = ['aaa aaa aab', 'aaa aab aab', 'aac aab aac', 'unk aaa unc']
+        self.unknown_words_model.define_model()
+        self.unknown_words_model.fit(sentences)
+        self.unknown_words_model.improve_embedding()
+        self.unknown_words_model.embedding.embedding_matrix
+        self.assertTrue(any(self.unknown_words_model.embedding.embedding_matrix[-1] !=
+                            np.zeros(self.unknown_words_model.embedding.embed_size)))
+

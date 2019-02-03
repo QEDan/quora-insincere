@@ -6,7 +6,7 @@ from sklearn.model_selection import train_test_split
 
 
 class UnknownWords:
-    def __init__(self, text_mapper, embedding, max_words=5000,
+    def __init__(self, text_mapper, embedding, max_words=500,
                  loss='mean_squared_error'):
         self.text_mapper = text_mapper
         self.embedding = embedding
@@ -45,7 +45,11 @@ class UnknownWords:
             n_tokens = len(words)
         list_words = list(words)
         list_tokens = [self.texts_to_x(word) for word in list_words]
-        list_embeddings = [self.embedding.embeddings_index[t] for t in list_words]
+        list_embeddings = [self.embedding.embeddings_index[t]
+                           if t in self.embedding.embeddings_index.keys()
+                           else np.zeros(self.embedding.embed_size)
+                           for t in list_words
+                           ]
         array_tokens = np.array(list_tokens)
         array_embeddings = np.array(list_embeddings)
         train_X, val_X, train_y, val_y = train_test_split(array_tokens, array_embeddings, test_size=0.2)
@@ -60,3 +64,11 @@ class UnknownWords:
         input_x = np.array([self.texts_to_x(word) for word in words])
         predictions = self.model.predict(input_x)
         return predictions
+
+    def improve_embedding(self):
+        logging.info('Improving unknown embeddings with predicted values...')
+        for i, word in enumerate(self.embedding.word_vocab):
+            if word in self.embedding.unknown_words:
+                pred_embedding = self.predict(np.array([word]))
+                self.embedding.embedding_matrix[i] = pred_embedding[0]
+
