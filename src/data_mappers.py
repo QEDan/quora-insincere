@@ -1,4 +1,6 @@
 import numpy as np
+import string
+from keras.preprocessing.text import text_to_word_sequence
 
 
 class TextMapper:
@@ -28,16 +30,19 @@ class TextMapper:
         """ Handles mapping one text doc into model inputs """
         words_x = np.zeros(self.max_sent_len)
         chars_x = np.zeros((self.max_sent_len, self.max_word_len))
+        chars_feats_x = np.zeros((self.max_sent_len, self.max_word_len, self.char_mapper.num_add_feats))
 
         tokenized_question = self.nlp(text)
+        # tokenized_question = text_to_word_sequence(text, lower=False)
 
         for word_ind, token in enumerate(tokenized_question[:self.max_sent_len]):
             word = token.text
+            # word = token
             words_x[word_ind] = self.word_mapper.get_symbol_index(word)
             for char_ind, char in enumerate(word[:self.max_word_len]):
                 chars_x[word_ind][char_ind] = self.char_mapper.get_symbol_index(char)
-
-        return words_x, chars_x
+                chars_feats_x[word_ind][char_ind] = self.char_mapper.get_add_features(char)
+        return words_x, chars_x, chars_feats_x
 
     def x_to_words(self, words_x, remove_padding=True):
         words = [self.word_mapper.ix_to_symbol[int(i)] for i in words_x]
@@ -68,9 +73,8 @@ class TextMapper:
 
     def texts_to_x(self, texts):
         inputs_x = [self.text_to_x(text) for text in texts]
-        words_input, chars_input = map(np.array, zip(*inputs_x))
-        # return words_input
-        return {"words_input": words_input, "chars_input": chars_input}
+        words_input, chars_input, char_feats_input = map(np.array, zip(*inputs_x))
+        return {"words_input": words_input, "chars_input": chars_input, "chars_feats_input": char_feats_input}
 
     def set_max_sentence_len(self, max_sent_len):
         self.word_mapper.set_max_len(max_sent_len)
@@ -145,8 +149,8 @@ class SymbolMapper:
         """
         symbol_mappings = self.symbol_to_ix.keys()
         with open('coverage_stats.txt', 'w') if persist else None as f:
-            print("Number of unique {}: {}".format(symbols_name, len(self.symbol_counts)), file=f)
-            print("Number of unique {} mapped: {}".format(symbols_name, len(symbol_mappings)), file=f)
+            print("Number of unique {}: {}".format(symbols_name, len(self.symbol_counts)))
+            print("Number of unique {} mapped: {}".format(symbols_name, len(symbol_mappings)))
             total_tokens = 0
             mapped_tokens = 0
             for symbol, count in self.symbol_counts:
@@ -154,11 +158,9 @@ class SymbolMapper:
                 if symbol in symbol_mappings:
                     mapped_tokens += count
             print("Percent of unique symbols mapped: {}%".format(
-                100 * len(symbol_mappings) / len(self.symbol_counts)),
-                file=f)
+                100 * len(symbol_mappings) / len(self.symbol_counts)))
             print("Percent of total symbols mapped: {}%".format(
-                100 * mapped_tokens / total_tokens),
-                file=f)
+                100 * mapped_tokens / total_tokens))
 
 
 class WordMapper(SymbolMapper):
@@ -174,6 +176,18 @@ class CharMapper(SymbolMapper):
 
     def __init__(self, char_counts, threshold, max_word_len, char_lowercase):
         super().__init__(char_counts, threshold, max_word_len, char_lowercase)
+        self.num_add_feats = 2
+        # self.puncutation_list = string.punctuation
 
     def print_coverage_statistics(self, symbols_name='chars'):
         super().print_coverage_statistics(symbols_name)
+
+    def get_add_features(self, char):
+        add_feats = np.zeros(self.num_add_feats)
+        if char.isupper():
+            add_feats[0] = 1
+        if char.isdigit():
+            add_feats[1] = 1
+        # if char in self.puncutation_list:
+        #     add_feats[2] = 1
+        return add_feats

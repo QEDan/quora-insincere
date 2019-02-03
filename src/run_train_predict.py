@@ -12,6 +12,8 @@ import pandas as pd
 import random
 import tensorflow as tf
 import spacy
+import pickle
+import os
 
 from sklearn import metrics
 from sklearn.metrics import precision_recall_curve
@@ -180,16 +182,20 @@ def save_configs():
     logging.info('Configurations: ')
     logging.info(pprint(config_dict))
 
-
+import sys
+from pympler import asizeof
 def main():
     embedding_files = config.get('embedding_files')
     dev_size = config.get('dev_size')
+    # dev_size = 50000
     data = Data()
     data.load(dev_size)
     data.split()
 
-    nlp = spacy.load('en_core_web_sm', disable=['parser', 'tagger', 'ner'])
+    nlp = spacy.load('en', disable=['parser', 'tagger', 'ner'])
+
     corpus_info = CorpusInfo(data.get_questions(subset='train'), nlp)
+
     word_counts = corpus_info.word_counts
     char_counts = corpus_info.char_counts
 
@@ -197,7 +203,9 @@ def main():
                              char_threshold=350, max_sent_len=50, nlp=nlp, word_lowercase=True, char_lowercase=True)
 
     word_vocab = text_mapper.get_words_vocab()
+
     embeddings = load_embeddings(word_vocab, embedding_files)
+
     unknown_word_models = [UnknownWords(text_mapper, embedding) for embedding in embeddings]
     for model in unknown_word_models:
         model.define_model()
@@ -212,8 +220,9 @@ def main():
     #                                      embeddings,
     #                                      model_config=model.get('args')))
 
-    model = BiLSTMCharCNNModel(data=data, corpus_info=corpus_info, text_mapper=text_mapper, batch_size=32)
+    model = BiLSTMCharCNNModel(data=data, corpus_info=corpus_info, text_mapper=text_mapper, batch_size=128)
     model.blend_embeddings(embeddings)
+
     model.define_model()
     model.fit()
 

@@ -4,19 +4,19 @@ import numpy as np
 
 
 class DataGenerator(keras.utils.Sequence):
-    def __init__(self, text, text_mapper, labels, batch_size=16, shuffle=True):
+    def __init__(self, text, text_mapper, labels=None, batch_size=128, shuffle=True):
         self.batch_size = batch_size
         self.text = text
         self.labels = labels
         self.shuffle = shuffle
         self.text_mapper = text_mapper
 
-        self.indexes = np.arange(len(self.labels))
+        self.indexes = np.arange(len(self.text))
         self.on_epoch_end()
 
     def __len__(self):
         """Denotes the number of batches per epoch"""
-        return int(np.floor(len(self.labels) / self.batch_size))
+        return int(np.ceil(len(self.text) / self.batch_size))
 
     def __getitem__(self, index):
         """Generate one batch of data

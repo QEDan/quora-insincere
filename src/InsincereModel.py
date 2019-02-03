@@ -8,6 +8,7 @@ from src.Embedding import Embedding
 from src.LRFinder import LRFinder
 from src.OneCycleLR import OneCycleLR
 from src.config import config_insincere_model
+from src.data_generator import DataGenerator
 
 
 class InsincereModel:
@@ -86,7 +87,7 @@ class InsincereModel:
         config = self.config.get('callbacks')
         early_stop = EarlyStopping(monitor=config.get('early_stopping').get('monitor'),
                                    mode=config.get('early_stopping').get('mode'),
-                                   patience=config.get('early_stopping').get('patience'),
+                                   patience=1,
                                    verbose=config.get('early_stopping').get('verbose'),
                                    restore_best_weights=True)
         cbs = [early_stop]
@@ -107,30 +108,29 @@ class InsincereModel:
 
     def fit(self, curve_file_suffix=None):
         logging.info("Fitting model...")
+        self.model.summary()
         config = self.config.get('fit')
 
-        train_questions = self.data.train_qs
-        val_questions = self.data.val_qs
-
-        train_x = self.prepare_model_inputs(train_questions)
-        val_x = self.prepare_model_inputs(val_questions)
-
-        train_y = np.array(self.data.train_labels)
-        val_y = np.array(self.data.val_labels)
-
-        # train_generator = DataGenerator(text=self.data.train_qs, labels=self.data.train_labels,
-        #                                 text_mapper=self.text_mapper, batch_size=self.batch_size)
-        # val_generator = DataGenerator(text=self.data.val_qs, labels=self.data.val_labels,
-        #                               text_mapper=self.text_mapper, batch_size=self.batch_size)
+        train_generator = DataGenerator(text=self.data.train_qs, labels=self.data.train_labels,
+                                        text_mapper=self.text_mapper, batch_size=self.batch_size)
+        val_generator = DataGenerator(text=self.data.val_qs, labels=self.data.val_labels,
+                                      text_mapper=self.text_mapper, batch_size=self.batch_size)
 
         callbacks = self._get_callbacks(config.get('epochs'), config.get('batch_size'))
 
-        self.history = self.model.fit(x=train_x,
-                                      y=train_y,
-                                      epochs=2,
-                                      batch_size=32,
-                                      validation_data=(val_x, val_y),
-                                      callbacks=callbacks)
+        self.model.fit_generator(generator=train_generator, epochs=10, verbose=1, callbacks=callbacks,
+                                 validation_data=val_generator, max_queue_size=10,  # why not make this >>>
+                                 workers=1,
+                                 use_multiprocessing=False,
+                                 shuffle=True)
+
+
+        # self.history = self.model.fit(x=train_x,
+        #                               y=train_y,
+        #                               epochs=2,
+        #                               batch_size=32,
+        #                               validation_data=(val_x, val_y),
+        #                               callbacks=callbacks)
 
         if config.get('save_curve'):
             if self.lr_finder:
@@ -141,7 +141,7 @@ class InsincereModel:
             if curve_file_suffix:
                 filename += '_' + curve_file_suffix
             filename += '.png'
-            self.print_curve(filename)
+            # self.print_curve(filename)
 
     def predict_subset(self, subset='train'):
         if subset == 'train':
@@ -151,9 +151,10 @@ class InsincereModel:
         elif subset == 'test':
             questions = self.data.get_questions(subset)
 
-        input_x = self.prepare_model_inputs(questions)
-        preds = self.predict(input_x)
-
+        # input_x = self.prepare_model_inputs(questions)
+        # preds = self.predict(input_x)
+        data_gen = DataGenerator(text=questions, text_mapper=self.text_mapper, shuffle=False)
+        preds = self.model.predict_generator(data_gen, workers=2, use_multiprocessing=True, max_queue_size=100)
         return preds
 
     def print_curve(self, filename='training_curve.png'):
@@ -180,4 +181,5 @@ class InsincereModel:
         model_input = self.text_mapper.texts_to_x(questions)
         words_input = model_input['words_input']
         chars_input = model_input['chars_input']
-        return {'words_input': words_input, 'chars_input': chars_input}
+        char_feats_input = model_input['chars_feats_input']
+        return {'words_input': words_input, 'chars_input': chars_input, 'chars_feats_input': char_feats_input}
