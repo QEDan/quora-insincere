@@ -198,7 +198,7 @@ def main():
 
     nlp = spacy.load('en', disable=['parser', 'tagger', 'ner'])
 
-    ci_path = '/home/matt/ci.p'
+    ci_path = '/home/matt_kierans/ci.p'
     if os.path.isfile(ci_path):
         corpus_info = pickle.load(open(ci_path, 'rb'))
     else:
@@ -213,8 +213,8 @@ def main():
                              word_lowercase=True, char_lowercase=True)
 
     word_vocab = text_mapper.get_words_vocab()
-    emb_path = f'/home/matt/emb{word_threshold}.p'
-    unk_emb_path = f'/home/matt/emb_unk{word_threshold}.p'
+    emb_path = f'/home/matt_kierans/emb{word_threshold}.p'
+    unk_emb_path = f'/home/matt_kierans/emb_unk{word_threshold}.p'
 
     if os.path.isfile(unk_emb_path):
         embeddings = pickle.load(open(unk_emb_path, 'rb'))
