@@ -129,7 +129,8 @@ class InsincereModel:
         for i in range(3):
             train_generator.batch_size = batch_size[i]
             steps_per_epoch = int(len(train_generator)*fraction_of_training[i])
-            K.set_epsilon(epsilon[i])
+            # only if time allows more experimentation
+            # K.set_epsilon(epsilon[i])
 
             self.model.compile(loss=self.loss, loss_weights=loss_weights[i],
                                optimizer='adam', metrics=[self.f1_score])

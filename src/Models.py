@@ -102,9 +102,9 @@ class BiLSTMCharCNNModel(InsincereModel):
 
         # corpus params
         cps = {
-            'max_sent_len': self.text_mapper.max_sent_len
-            'max_word_len': self.text_mapper.max_word_len
-            'word_vocab_size': self.text_mapper.word_mapper.get_vocab_len()
+            'max_sent_len': self.text_mapper.max_sent_len,
+            'max_word_len': self.text_mapper.max_word_len,
+            'word_vocab_size': self.text_mapper.word_mapper.get_vocab_len(),
             'char_vocab_size':self.text_mapper.char_mapper.get_vocab_len()
         }
 
@@ -170,7 +170,8 @@ class BiLSTMCharCNNModel(InsincereModel):
         conv_cell_out = conv_cell([x, word_rep])
 
         # add additional sentence features? can comment in/out
-        conv_cell_out = Concatenate()([conv_cell_out, inputs['sent_feats_input']])(conv_cell_out)
+        conv_cell_out = Concatenate()([conv_cell_out, inputs['sent_feats_input'],
+                                       lstm_logits, conv_logits])(conv_cell_out)
 
         conv_dense = Dense(32, activation='relu')(conv_cell_out)
         ensemble_weights = Dense(2, activation='softmax')(conv_dense)
