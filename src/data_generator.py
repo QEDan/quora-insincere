@@ -18,6 +18,9 @@ class DataGenerator(keras.utils.Sequence):
         """Denotes the number of batches per epoch"""
         return int(np.ceil(len(self.text) / self.batch_size))
 
+    def shuffle_data(self):
+        np.random.shuffle(self.indexes)
+
     def __getitem__(self, index):
         """Generate one batch of data
 
@@ -32,7 +35,7 @@ class DataGenerator(keras.utils.Sequence):
         # Generate data
         if self.labels is not None:
             X, y = self.__data_generation(indexes, return_y=True)
-            return X, y
+            return X, [y, y, y]
         else:
             X = self.__data_generation(indexes, return_y=False)
             return X

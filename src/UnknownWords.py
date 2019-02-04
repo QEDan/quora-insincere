@@ -48,7 +48,7 @@ class UnknownWords:
     def fit(self):
         logging.info('Fitting UnknownWords model...')
         train_X, val_X, train_y, val_y = self.training_data()
-        self.model.fit(x=train_X, y=train_y, epochs=4, batch_size=128, validation_data=(val_X, val_y))
+        self.model.fit(x=train_X, y=train_y, epochs=4, batch_size=128, verbose=2, validation_data=(val_X, val_y))
 
     def predict(self, words):
         input_x = np.array([self.word_to_x(word) for word in words])

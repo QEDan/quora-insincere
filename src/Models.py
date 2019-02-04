@@ -11,7 +11,7 @@ from keras import initializers, regularizers, constraints, optimizers, layers
 from keras.layers import Layer
 from keras.layers import TimeDistributed, Embedding as EmbeddingLayer, Bidirectional, CuDNNLSTM, Dense, Conv1D
 from keras.layers import GlobalMaxPooling1D, Concatenate, BatchNormalization, Dropout, SpatialDropout1D, CuDNNGRU
-from keras.layers import GlobalAveragePooling1D, Add
+from keras.layers import GlobalAveragePooling1D, Add, Activation, Average, Maximum, Multiply, Dot
 import keras.backend as K
 import numpy as np
 
@@ -88,6 +88,15 @@ class Attention(Layer):
 
 
 class BiLSTMCharCNNModel(InsincereModel):
+    """
+    notes:
+
+    dropout should never be used before any batchnorm, only after
+    batchnorm momentum should be decreased when using larger batch sizes
+
+    """
+
+
     def define_model(self, model_config=None):
         # if model_config is None:
         #     model_config = self.default_config()
@@ -100,78 +109,155 @@ class BiLSTMCharCNNModel(InsincereModel):
         chars_input = Input(shape=(max_sent_len, max_word_len), name='chars_input', dtype='int64')
         char_feats_input = Input(shape=(max_sent_len, max_word_len, self.text_mapper.char_mapper.num_add_feats),
                                  name='chars_feats_input', dtype='float32')
-        char_features = char_level_feature_model(chars_input, char_feats_input, max_word_len, char_vocab_size)
-
+        lstm_char_features = char_level_feature_model(chars_input, char_feats_input, max_word_len, char_vocab_size)
+        conv_char_features = char_level_feature_model(chars_input, char_feats_input, max_word_len, char_vocab_size)
+        sent_char_features = char_level_feature_model(chars_input, char_feats_input, max_word_len,
+                                                      char_vocab_size, outdim=32)
+        sent_feats_input = Input(shape=(self.text_mapper.num_sent_feats,), name="sent_feats_input", dtype='float32')
         words_input = Input(shape=(max_sent_len,), name='words_input', dtype='int64')
+        # trainable_lstm_embedding = EmbeddingLayer(input_dim=word_vocab_size, output_dim=10,
+        #                                           input_length=max_sent_len)(words_input)
 
-        trainable_words_embedding = EmbeddingLayer(input_dim=word_vocab_size, output_dim=30,
-                                                   input_length=max_sent_len)(words_input)
-        matrix_shape = self.embedding.embedding_matrix.shape
+        # todo: is this doing something useful? maybe each model should get their own?
+        trainable_char_embedding = EmbeddingLayer(input_dim=word_vocab_size, output_dim=10,
+                                                  input_length=max_sent_len)(words_input)
+        trainable_char_embedding = SpatialDropout1D(0.1)(trainable_char_embedding)
+
         if self.embedding is not None:
-            un_trainable_words_embedding = EmbeddingLayer(input_dim=word_vocab_size,
-                                                          output_dim=matrix_shape[1],
-                                                          input_length=max_sent_len,
-                                                          weights=[self.embedding.embedding_matrix],
-                                                          trainable=False)(words_input)
-            regularized_word_embeddings = EmbeddingLayer(input_dim=word_vocab_size,
-                                                         output_dim=matrix_shape[1],
-                                                         input_length=max_sent_len,
-                                                         weights=[np.zeros(matrix_shape)],
-                                                         embeddings_regularizer=regularizers.l2(),
-                                                         trainable=True)(words_input)
-            words_embedding = Add()([un_trainable_words_embedding, regularized_word_embeddings])
-            word_rep = Concatenate()([char_features, words_embedding, trainable_words_embedding])
+            matrix_shape = self.embedding.embedding_matrix.shape
+            # todo: make this trainable at the end
+            untrainable_word_embedding = EmbeddingLayer(input_dim=word_vocab_size,
+                                                        output_dim=matrix_shape[1],
+                                                        input_length=max_sent_len,
+                                                        weights=[self.embedding.embedding_matrix],
+                                                        trainable=False,
+                                                        name='static_word_emb')(words_input)
+            # regularized_word_embedding = EmbeddingLayer(input_dim=word_vocab_size,
+            #                                             output_dim=matrix_shape[1],
+            #                                             input_length=max_sent_len,
+            #                                             weights=[np.zeros(matrix_shape)],
+            #                                             # embeddings_regularizer=regularizers.l2(0.1),  # todo: tune this regularization
+            #                                             trainable=False,
+            #                                             name='reg_word_emb')(words_input)
+            # word_emb = Add()([untrainable_word_embedding, regularized_word_embedding])
+            word_emb = untrainable_word_embedding
+            lstm_embedding = SpatialDropout1D(0.1)(word_emb)
+            conv_embedding = SpatialDropout1D(0.1)(word_emb)
+            lstm_rep = Concatenate()([lstm_char_features, lstm_embedding])
+            conv_rep = Concatenate()([conv_char_features, conv_embedding])
+            # lstm_rep = Concatenate()([lstm_char_features, lstm_embedding, trainable_lstm_embedding])
+            # conv_rep = Concatenate()([conv_char_features, conv_embedding, trainable_char_embedding])
         else:
-            word_rep = Concatenate()([char_features, trainable_words_embedding])
+            trainable_lstm_embedding = EmbeddingLayer(input_dim=word_vocab_size,
+                                                      output_dim=50,
+                                                      input_length=max_sent_len,
+                                                      trainable=False)(words_input)
+            trainable_conv_embedding = EmbeddingLayer(input_dim=word_vocab_size,
+                                                      output_dim=50,
+                                                      input_length=max_sent_len,
+                                                      trainable=False)(words_input)
+            lstm_embedding = SpatialDropout1D(0.1)(trainable_lstm_embedding)
+            conv_embedding = SpatialDropout1D(0.1)(trainable_conv_embedding)
+            lstm_rep = Concatenate()([lstm_char_features, lstm_embedding])
+            conv_rep = Concatenate()([conv_char_features, conv_embedding])
 
-        x = Bidirectional(CuDNNLSTM(64, return_sequences=True))(word_rep)
-        y = Bidirectional(CuDNNGRU(64, return_sequences=True))(x)
+        words_feats_input = Input(shape=(max_sent_len, self.text_mapper.word_mapper.num_add_feats),
+                                  name='words_feats_input', dtype='float32')
+        lstm_rep = Concatenate()([lstm_rep, words_feats_input])
+        conv_rep = Concatenate()([conv_rep, words_feats_input])
 
-        atten_1 = Attention(max_sent_len)(x)  # skip connect
-        atten_2 = Attention(max_sent_len)(y)
-        avg_pool = GlobalAveragePooling1D()(y)
-        max_pool = GlobalMaxPooling1D()(y)
+        x = Bidirectional(CuDNNLSTM(64, return_sequences=True))(lstm_rep)
+        lstm_out = Bidirectional(CuDNNGRU(64))(x)
+        lstm_logits = Dense(1, activation='linear')(lstm_out)
+        lstm_pred = Activation('sigmoid', name='lstm_pred')(lstm_logits)
 
-        conc = Concatenate()([atten_1, atten_2, avg_pool, max_pool])
-        conc = Dense(16, activation="relu")(conc)
-        conc = Dropout(0.1)(conc)
+        conv_outputs = []
+        conv_kernels = [[16, 1], [16, 2], [16, 3], [16, 4]]
+        for num_filter, kernel_size in conv_kernels:
+            # todo: consider adding output of bilstm back here - conv model is too weak, but we don't want to affect learning (turn off backprop?)
+            for i in [conv_rep]:
+                char_conv = Conv1D(filters=num_filter, kernel_size=kernel_size)(i)
+                batch_norm = BatchNormalization()(char_conv)
+                activation = Activation('relu')(batch_norm)
+                global_max = GlobalMaxPooling1D()(activation)
+                # global_avg = GlobalAveragePooling1D()(activation)
+                # path_out = Concatenate()([global_max, global_avg])
+                conv_outputs.append(global_max)
 
-        # x = Conv1D(filters=100, kernel_size=2)(x)
-        # max_x = GlobalMaxPooling1D()(x)
-        # avg_x = GlobalAveragePooling1D()(x)
-        # x = Concatenate()([max_x, avg_x])
-        # x = Dense(16)(x)
-        # x = Flatten()(char_sum)
-        preds = Dense(1, activation='sigmoid')(conc)
+        conv_out = Concatenate()(conv_outputs)
+        # conv_out = Concatenate()([conv_out, sent_feats_input])
+        conv_dense = Dense(128, activation='relu')(conv_out)
+        # todo: look up adjusting batch norm momentum (talked about in forums)
+        # todo: maybe add another dense layer?
+        conv_dense = Dropout(0.2)(conv_dense)
+        conv_logits = Dense(1, activation='linear')(conv_dense)
+        conv_pred = Activation('sigmoid', name='conv_pred')(conv_logits)
 
-        inputs = [chars_input, words_input, char_feats_input]
+        error_feats = Concatenate()([sent_char_features, words_feats_input, trainable_char_embedding])
+        conv_outputs = []
 
+        conv_kernels = [[16, 1], [16, 2], [16, 3], [16, 4]]
+        for num_filter, kernel_size in conv_kernels:
+            # todo: consider adding output of bilstm back here - conv model is too weak,
+            #  but don't want to affect lstm backprop (turn this off? how?)
+            for i in [error_feats]:
+                char_conv = Conv1D(filters=num_filter, kernel_size=kernel_size)(i)
+                batch_norm = BatchNormalization()(char_conv)
+                activation = Activation('relu')(batch_norm)
+                # todo: try maxpool and more conv layers instead
+                global_max = GlobalMaxPooling1D()(activation)
+                global_avg = GlobalAveragePooling1D()(activation)
+                path_out = Concatenate()([global_max, global_avg])
+                conv_outputs.append(path_out)
+
+        conv_out = Concatenate()(conv_outputs)
+
+        # todo: add sentence level faetures here (ie how many unknown words, how many caps, how many words,
+        #  average_length word etc - we need the final layer to learn when/how the other models are correct/incorrect)
+        # todo: remove conv_dense and lstm_out from here I think
+
+        sent_rep = Concatenate()([lstm_logits, conv_logits, sent_feats_input, conv_out])  # what are some more features to add?
+        sent_rep = Dense(64, activation='relu')(sent_rep)
+        sent_rep = Dropout(0.3)(sent_rep)
+        sent_rep = Dense(32, activation='relu')(sent_rep)
+        sent_rep = Dropout(0.2)(sent_rep)
+        model_weight = Dense(2, activation='softmax', name='model_weight')(sent_rep)
+
+        ensemble_preds = Concatenate()([lstm_pred, conv_pred])
+        final_pred = Dot(axes=-1)([model_weight, ensemble_preds])
+
+        inputs = [chars_input, words_input, char_feats_input, words_feats_input, sent_feats_input]
+        preds = [lstm_pred, conv_pred, final_pred]
         self.model = Model(inputs=inputs, outputs=preds)
-        self.model.compile(loss=self.loss, optimizer='adam', metrics=['accuracy', self.f1_score])
-
         return self.model
 
 
-def char_level_feature_model(char_input, char_feat_input, max_word_len, char_vocab_size):
+def char_level_feature_model(char_input, char_feat_input, max_word_len, char_vocab_size, outdim=100):
     chars_words_embedding = TimeDistributed(EmbeddingLayer(char_vocab_size,
                                                            output_dim=16,
+                                                           # embeddings_regularizer=regularizers.l1(),
                                                            input_length=max_word_len))(char_input)
     x = TimeDistributed(SpatialDropout1D(0.1))(chars_words_embedding)
     char_rep = Concatenate()([x, char_feat_input])
     conv_outputs = []
     # todo: tune these conv kernels
-    conv_kernels = [[32, 2], [32, 3], [32, 4], [32, 5]]
+    conv_kernels = [[32, 1], [32, 2], [32, 3], [32, 4]]
     for num_filter, kernel_size in conv_kernels:
-        char_conv = TimeDistributed(Conv1D(filters=num_filter, kernel_size=kernel_size, activation='relu'))(char_rep)
-        batch_norm = TimeDistributed(BatchNormalization())(char_conv)
-        # todo: put batch norm after max pooling?
-        x = TimeDistributed(GlobalMaxPooling1D())(batch_norm)
-        conv_outputs.append(x)
-    x = Concatenate()(conv_outputs)
-    # x = Dense(100, activation='relu')(x)
-    # x = Dropout(0.3)(x)
-    # x = Dense(50, activation='relu')(x)
-    return x
+        char_conv = TimeDistributed(Conv1D(filters=num_filter, kernel_size=kernel_size))(char_rep)
+        x = TimeDistributed(BatchNormalization())(char_conv)
+        x = TimeDistributed(Activation('relu'))(x)
+        # x = TimeDistributed(Dropout(0.1))(x)
+        m = TimeDistributed(GlobalMaxPooling1D())(x)
+        conv_outputs.append(m)
+    conv_outs = Concatenate()(conv_outputs)
+    feats_1 = Dense(128)(conv_outs)
+    feats_1 = BatchNormalization()(feats_1)
+    feats_1 = Activation('relu')(feats_1)
+    # feats_2 = Dense(outdim)(feats_1)
+    # feats_2 = BatchNormalization()(feats_2)
+    # feats_2 = Activation('relu')(feats_2)
+    # x = Concatenate()([feats_1, feats_2])
+    return feats_2
 
 # dev_size = config.get('dev_size')
 # data = DataV2()

@@ -109,6 +109,7 @@ class InsincereModel:
     def fit(self, curve_file_suffix=None):
         logging.info("Fitting model...")
         self.model.summary()
+
         config = self.config.get('fit')
 
         train_generator = DataGenerator(text=self.data.train_qs, labels=self.data.train_labels,
@@ -118,15 +119,28 @@ class InsincereModel:
 
         callbacks = self._get_callbacks(config.get('epochs'), config.get('batch_size'))
 
-        # batch_size = [32, 64, 128, 256]
+        batch_size = [64, 128, 256]
+        loss_weights = [[1, 1, 0.2], [1, 1, 1], [0.2, 0.2, 1]]
+        epsilon = [1e-7, 1e-6, 1e-5]
+        fraction_of_training = [1/4, 1/2, 1]
         # todo: write this in a for loop and change batch size, learning rate, and epsilon (K.set_epsilon(1e-2))
-        # for i in range(4):
-        #     train_generator.batch_size = batch_size[i]
-        self.model.fit_generator(generator=train_generator, epochs=5, verbose=1, callbacks=callbacks,
-                                 validation_data=val_generator, max_queue_size=10,  # why not make this >>>
-                                 workers=1,
-                                 use_multiprocessing=False,
-                                 shuffle=True)
+        # todo: optimize learning rates
+        # todo: experiment with epsilon smoothing
+        for i in range(3):
+            train_generator.batch_size = batch_size[i]
+            steps_per_epoch = int(len(train_generator)*fraction_of_training[i])
+            K.set_epsilon(epsilon[i])
+
+            self.model.compile(loss=self.loss, loss_weights=loss_weights[i],
+                               optimizer='adam', metrics=[self.f1_score])
+            self.model.fit_generator(generator=train_generator, steps_per_epoch=steps_per_epoch,
+                                     verbose=1, callbacks=callbacks,
+                                     validation_data=val_generator,
+                                     max_queue_size=10,
+                                     workers=1,
+                                     use_multiprocessing=False,
+                                     shuffle=True)
+            train_generator.shuffle_data()
 
 
         # self.history = self.model.fit(x=train_x,
@@ -158,8 +172,8 @@ class InsincereModel:
         # input_x = self.prepare_model_inputs(questions)
         # preds = self.predict(input_x)
         data_gen = DataGenerator(text=questions, text_mapper=self.text_mapper, shuffle=False)
-        preds = self.model.predict_generator(data_gen, workers=1, use_multiprocessing=True, max_queue_size=10)
-        return preds
+        preds = self.model.predict_generator(data_gen, workers=1, use_multiprocessing=False, max_queue_size=10)
+        return preds[2][:, 0]
 
     def print_curve(self, filename='training_curve.png'):
         plt.plot(self.history.history['loss'])

@@ -3,6 +3,7 @@ import matplotlib
 from pprint import pprint
 
 from src.UnknownWords import UnknownWords
+from src.data_generator import DataGenerator
 
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -184,12 +185,15 @@ def save_configs():
 
 
 def main():
+    word_threshold = 5
+    char_threshold = 50
 
     embedding_files = config.get('embedding_files')
     dev_size = config.get('dev_size')
     # dev_size = 50000
     data = Data()
     data.load(dev_size)
+    data.perform_preprocessing()
     data.split()
 
     nlp = spacy.load('en', disable=['parser', 'tagger', 'ner'])
@@ -199,17 +203,18 @@ def main():
         corpus_info = pickle.load(open(ci_path, 'rb'))
     else:
         corpus_info = CorpusInfo(data.get_questions(subset='train'), nlp)
-        pickle.dump(corpus_info, open(ci_path, 'wb'))
+        # pickle.dump(corpus_info, open(ci_path, 'wb'))
 
     word_counts = corpus_info.word_counts
     char_counts = corpus_info.char_counts
 
-    text_mapper = TextMapper(word_counts=word_counts, char_counts=char_counts, word_threshold=5, max_word_len=12,
-                             char_threshold=350, max_sent_len=70, nlp=nlp, word_lowercase=True, char_lowercase=True)
+    text_mapper = TextMapper(word_counts=word_counts, char_counts=char_counts, word_threshold=word_threshold,
+                             max_word_len=15, char_threshold=char_threshold, max_sent_len=70, nlp=nlp,
+                             word_lowercase=True, char_lowercase=True)
 
     word_vocab = text_mapper.get_words_vocab()
-    emb_path = '/home/matt/emb.p'
-    unk_emb_path = '/home/matt/emb_unk.p'
+    emb_path = f'/home/matt/emb{word_threshold}.p'
+    unk_emb_path = f'/home/matt/emb_unk{word_threshold}.p'
 
     if os.path.isfile(unk_emb_path):
         embeddings = pickle.load(open(unk_emb_path, 'rb'))
@@ -218,9 +223,9 @@ def main():
             embeddings = pickle.load(open(emb_path, 'rb'))
         else:
             embeddings = load_embeddings(word_vocab, embedding_files)
-            pickle.dump(embeddings, open(emb_path, 'wb'))
+            # pickle.dump(embeddings, open(emb_path, 'wb'))
 
-        unknown_char_mapper = CharMapper(char_counts=char_counts, threshold=100, char_lowercase=True)
+        unknown_char_mapper = CharMapper(char_counts=char_counts, threshold=10, char_lowercase=True)
         unknown_char_len = 20
         unknown_word_models = [UnknownWords(char_mapper=unknown_char_mapper, max_word_len=unknown_char_len,
                                             word_vocab=word_vocab, embedding=embedding) for embedding in embeddings]
@@ -228,21 +233,16 @@ def main():
             model.define_model()
             model.fit()
             model.improve_embedding()
-        pickle.dump(embeddings, open(unk_emb_path, 'wb'))
-
-    # save_unknown_words(data, embeddings, max_words=200)
-    # models_all = list()
-    # for model in config.get('models'):
-    #     model_class = globals()[model.get('class')]
-    #     models_all.extend(cross_validate(model_class,
-    #                                      data,
-    #                                      embeddings,
-    #                                      model_config=model.get('args')))
+        # pickle.dump(embeddings, open(unk_emb_path, 'wb'))
 
     model = BiLSTMCharCNNModel(data=data, corpus_info=corpus_info, text_mapper=text_mapper, batch_size=128)
     model.blend_embeddings(embeddings)
 
     model.define_model()
+    # model.model.summary()
+    # a = DataGenerator(text=data.train_qs, labels=data.train_labels,
+    #                   text_mapper=text_mapper, batch_size=16)
+
     model.fit()
 
     # cleanup_models([model])  # embedding/memory cleanup

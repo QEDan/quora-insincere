@@ -7,7 +7,7 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 
 from src.config import config_data
-from src.text_cleaning import clean_contractions, clean_specials, clean_spelling, \
+from src.text_cleaning import clean_apos, clean_specials, clean_spelling, \
     clean_acronyms, clean_non_dictionary, clean_numbers
 
 
@@ -38,25 +38,30 @@ class Data:
         self.train_qs, self.val_qs, self.train_labels, self.val_labels = self.get_training_split()
         return self.train_qs, self.val_qs, self.train_labels, self.val_labels
 
+    def perform_preprocessing(self):
+        self.train_df['question_text'] = self.preprocessing(self.train_df['question_text'])
+        self.test_df['question_text'] = self.preprocessing(self.test_df['question_text'])
+
     @staticmethod
     def preprocessing(questions):
 
         questions = questions.fillna("_na_")
-        preprocess_config = config_data.get('preprocess')
-        case_sensitive = not preprocess_config.get('lower_case')
+        # preprocess_config = config_data.get('preprocess')
+        # case_sensitive = not preprocess_config.get('lower_case')
         # trouble removing stop words before we have tokenized the text, this has to happen later
         # if preprocess_config.get('remove_stop_words'):
             # questions = questions.apply(remove_stops)
-        if preprocess_config.get('remove_specials'):
-            questions = questions.apply(lambda x: clean_specials(x))
+        # if preprocess_config.get('remove_specials'):
+        #     questions = questions.apply(lambda x: clean_specials(x))
         # if preprocess_config.get('correct_spelling'):
         #     questions = questions.apply(lambda x: clean_spelling(x, case_sensitive=case_sensitive))
-        if preprocess_config.get('replace_acronyms'):
-            questions = questions.apply(lambda x: clean_acronyms(x, case_sensitive=case_sensitive))
-        if preprocess_config.get('replace_non_words'):
-            questions = questions.apply(lambda x: clean_non_dictionary(x, case_sensitive=case_sensitive))
-        if preprocess_config.get('replace_numbers'):
-            questions = questions.apply(lambda x: clean_numbers(x))
+        # if preprocess_config.get('replace_acronyms'):
+        #     questions = questions.apply(lambda x: clean_acronyms(x, case_sensitive=case_sensitive))
+        # if preprocess_config.get('replace_non_words'):
+        #     questions = questions.apply(lambda x: clean_non_dictionary(x, case_sensitive=case_sensitive))
+        # if preprocess_config.get('replace_numbers'):
+        #     questions = questions.apply(lambda x: clean_numbers(x))
+        questions = questions.apply(lambda x: clean_specials(x))
         return questions
 
     def get_questions(self, subset='train'):
