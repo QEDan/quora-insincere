@@ -144,22 +144,19 @@ class SymbolMapper:
         self.symbol_to_ix = dict()
         self.ix_to_symbol = dict()
 
+        symbol_counts = sorted(symbol_counts, key=lambda x: x[1], reverse=True)
+        self.vocab = [symbol for symbol, count in symbol_counts if count >= self.threshold]
+        self.vocab = self.BASE_ALPHABET + self.vocab
+
         self.init_mappings(threshold)
 
     def init_mappings(self, check_coverage=True):
-        symbol_counts = sorted(self.symbol_counts, key=lambda x: x[1], reverse=True)
-        self.vocab = [symbol for symbol, count in symbol_counts if count >= self.threshold]
-        self.vocab = self.BASE_ALPHABET + self.vocab
 
         self.symbol_to_ix = {symbol: ix for ix, symbol in enumerate(self.vocab)}
         self.ix_to_symbol = {ix: symbol for ix, symbol in enumerate(self.vocab)}
 
         if check_coverage:
             self.print_coverage_statistics()
-
-    def set_threshold(self, threshold, check_coverage=True):
-        self.threshold = threshold
-        self.init_mappings(check_coverage)
 
     def print_top_n_symbols(self, n=10):
         print([(symbol, count) for symbol, count in self.symbol_counts if count >= self.threshold][:n])

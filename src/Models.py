@@ -126,71 +126,23 @@ class BiLSTMCharCNNModel(InsincereModel):
             "words_feats_input": words_feats_input,
         }
 
-        lstm_pred, lstm_logits = self.lstm_model(model_inputs, cps)
-        conv_pred, conv_logits = self.conv_model(model_inputs, cps)
+        # load this large matrix only once, and then reuse if when needed
+        word_emb = self.get_word_embedding_layer(model_inputs, cps)
 
-        ensemble_weights = self.ensemble_weights_model(model_inputs, cps, lstm_logits, conv_logits)
+        lstm_pred, lstm_logits = lstm_model(model_inputs, cps, word_emb)
+        conv_pred, conv_logits = conv_model(model_inputs, cps, word_emb)
+
+        ensemble_weights = ensemble_weights_model(model_inputs, cps, word_emb, lstm_logits, conv_logits)
 
         ensemble_preds = Concatenate()([lstm_pred, conv_pred])
         final_pred = Dot(axes=-1)([ensemble_weights, ensemble_preds])
 
-        inputs = list(model_inputs.keys())
+        inputs = list(model_inputs.values())
         preds = [lstm_pred, conv_pred, final_pred]
         self.model = Model(inputs=inputs, outputs=preds)
         return self.model
 
-    def lstm_model(self, inputs, cps):
-        word_rep = self.word_rep_with_char_info(inputs, cps)
-        x = Bidirectional(CuDNNLSTM(64, return_sequences=True))(word_rep)
-        lstm_out = Bidirectional(CuDNNGRU(64))(x)
-        lstm_logits = Dense(1, activation='linear')(lstm_out)
-        lstm_pred = Activation('sigmoid', name='lstm_pred')(lstm_logits)
-        return lstm_pred, lstm_logits
-
-    def conv_model(self, inputs, cps):
-        word_rep = self.word_rep_with_char_info(inputs, cps)
-        conv_cell_out = conv_cell(word_rep)
-
-        # add additional sentence features? can comment in/out
-        conv_cell_out = Concatenate()([conv_cell_out, inputs['sent_feats_input']])(conv_cell_out)
-
-        # conv_out = Concatenate()([conv_out, sent_feats_input])
-        conv_dense = Dense(64, activation='relu')(conv_cell_out)
-        # maybe add another dense layer?
-        conv_dense = Dropout(0.2)(conv_dense)
-        conv_logits = Dense(1, activation='linear')(conv_dense)
-        conv_pred = Activation('sigmoid', name='conv_pred')(conv_logits)
-        return conv_pred, conv_logits
-
-    def ensemble_weights_model(self, inputs, cps, lstm_logits, conv_logits):
-        # todo: make this simpler
-
-        word_rep = self.word_rep_with_char_info(inputs, cps)
-        x = Bidirectional(CuDNNLSTM(16, return_sequences=True))(word_rep)
-        conv_cell_out = conv_cell([x, word_rep])
-
-        # add additional sentence features? can comment in/out
-        conv_cell_out = Concatenate()([conv_cell_out, inputs['sent_feats_input'],
-                                       lstm_logits, conv_logits])(conv_cell_out)
-
-        conv_dense = Dense(32, activation='relu')(conv_cell_out)
-        ensemble_weights = Dense(2, activation='softmax')(conv_dense)
-        return ensemble_weights
-
-    def word_rep_with_char_info(self, inputs, cps):
-
-        char_features = char_level_feature_model(char_input=inputs['chars_input'],
-                                                 char_feat_input=inputs['char_feats_input'],
-                                                 max_word_len=cps['max_word_len'],
-                                                 char_vocab_size=cps['char_vocab_size'])
-
-        # Can optionally allow each word_rep to have some of it's word embedding trainable by including this:
-        # and then concatenating at the end
-
-        # trainable_char_embedding = EmbeddingLayer(input_dim=word_vocab_size, output_dim=10,
-        #                                           input_length=max_sent_len)(words_input)
-        # trainable_char_embedding = SpatialDropout1D(0.1)(trainable_char_embedding)
-
+    def get_word_embedding_layer(self, inputs, cps):
         # are we using pretrained weights?
         if self.embedding is not None:
             # todo: make this trainable at the end
@@ -225,19 +177,76 @@ class BiLSTMCharCNNModel(InsincereModel):
                                                       input_length=cps['max_sent_len'],
                                                       trainable=True)(inputs['words_input'])
             word_emb = trainable_lstm_embedding
-        word_emb = SpatialDropout1D(0.1)(word_emb)
-        word_rep = Concatenate()([char_features, word_emb, inputs["words_feats_input"]])
-        # word_rep = Concatenate()([char_features, word_emb, inputs["words_feats_input"], trainable_conv_embedding])
+        return word_emb
 
-        return word_rep
 
-def char_level_feature_model(char_input, char_feat_input, max_word_len, char_vocab_size, outdim=100):
-    chars_words_embedding = TimeDistributed(EmbeddingLayer(char_vocab_size,
+def lstm_model(inputs, cps, word_emb):
+    word_rep = word_rep_with_char_info(inputs, cps, word_emb)
+    x = Bidirectional(CuDNNLSTM(64, return_sequences=True))(word_rep)
+    lstm_out = Bidirectional(CuDNNGRU(64))(x)
+    lstm_logits = Dense(1, activation='linear')(lstm_out)
+    lstm_pred = Activation('sigmoid', name='lstm_pred')(lstm_logits)
+    return lstm_pred, lstm_logits
+
+
+def conv_model(inputs, cps, word_emb):
+    word_rep = word_rep_with_char_info(inputs, cps, word_emb)
+    conv_cell_out = conv_cell(word_rep)
+
+    # add additional sentence features? can comment in/out
+    conv_cell_out = Concatenate()([conv_cell_out, inputs['sent_feats_input']])
+
+    # conv_out = Concatenate()([conv_out, sent_feats_input])
+    conv_dense = Dense(64, activation='relu')(conv_cell_out)
+    # maybe add another dense layer?
+    conv_dense = Dropout(0.2)(conv_dense)
+    conv_logits = Dense(1, activation='linear')(conv_dense)
+    conv_pred = Activation('sigmoid', name='conv_pred')(conv_logits)
+    return conv_pred, conv_logits
+
+
+def ensemble_weights_model(inputs, cps, word_emb, lstm_logits, conv_logits):
+    # todo: make this simpler
+
+    word_rep = word_rep_with_char_info(inputs, cps, word_emb)
+    x = Bidirectional(CuDNNLSTM(16, return_sequences=True))(word_rep)
+    conv_cell_out = conv_cell([x, word_rep])
+
+    # add additional sentence features? can comment in/out
+    conv_cell_out = Concatenate()([conv_cell_out, inputs['sent_feats_input'],
+                                   lstm_logits, conv_logits])
+
+    conv_dense = Dense(32, activation='relu')(conv_cell_out)
+    ensemble_weights = Dense(2, activation='softmax')(conv_dense)
+    return ensemble_weights
+
+
+def word_rep_with_char_info(inputs, cps, word_emb):
+
+    char_features = char_level_feature_model(inputs, cps)
+
+    # Can optionally allow each word_rep to have some of it's word embedding trainable by including this:
+    # and then concatenating at the end
+
+    # trainable_char_embedding = EmbeddingLayer(input_dim=word_vocab_size, output_dim=10,
+    #                                           input_length=max_sent_len)(words_input)
+    # trainable_char_embedding = SpatialDropout1D(0.1)(trainable_char_embedding)
+
+    word_emb = SpatialDropout1D(0.1)(word_emb)
+    word_rep = Concatenate()([char_features, word_emb, inputs["words_feats_input"]])
+    # word_rep = Concatenate()([char_features, word_emb, inputs["words_feats_input"], trainable_conv_embedding])
+
+    return word_rep
+
+
+def char_level_feature_model(inputs, cps, outdim=128):
+
+    chars_words_embedding = TimeDistributed(EmbeddingLayer(cps['char_vocab_size'],
                                                            output_dim=16,
                                                            # embeddings_regularizer=regularizers.l1(),
-                                                           input_length=max_word_len))(char_input)
+                                                           input_length=cps['max_word_len']))(inputs['chars_input'])
     x = TimeDistributed(SpatialDropout1D(0.1))(chars_words_embedding)
-    char_rep = Concatenate()([x, char_feat_input])
+    char_rep = Concatenate()([x, inputs['char_feats_input']])
     conv_outputs = []
     # todo: tune these conv kernels
     conv_kernels = [[32, 1], [32, 2], [32, 3], [32, 4]]
@@ -249,7 +258,7 @@ def char_level_feature_model(char_input, char_feat_input, max_word_len, char_voc
         m = TimeDistributed(GlobalMaxPooling1D())(x)
         conv_outputs.append(m)
     conv_outs = Concatenate()(conv_outputs)
-    feats_1 = Dense(128)(conv_outs)
+    feats_1 = Dense(outdim)(conv_outs)
     feats_1 = BatchNormalization()(feats_1)
     feats_1 = Activation('relu')(feats_1)
     # feats_2 = Dense(outdim)(feats_1)
@@ -258,20 +267,26 @@ def char_level_feature_model(char_input, char_feat_input, max_word_len, char_voc
     # x = Concatenate()([feats_1, feats_2])
     return feats_1
 
+
 def conv_cell(input_layers, conv_kernels=[[32, 1], [32, 2], [32, 3], [32, 4]]):
     conv_outputs = []
 
+    if not isinstance(input_layers, list):
+        input_layers = [input_layers]
     for num_filter, kernel_size in conv_kernels:
         # todo: consider adding output of bilstm back here
         # why is conv model weak? but we don't want to affect learning (turn off backprop?)
-        for i in [input_layers]:
+        for i in input_layers:
             char_conv = Conv1D(filters=num_filter, kernel_size=kernel_size)(i)
             batch_norm = BatchNormalization()(char_conv)
             activation = Activation('relu')(batch_norm)
             conv_features = []
             conv_features.append(GlobalMaxPooling1D()(activation))
             # conv_features.append(GlobalAveragePooling1D()(activation))
-            conv_feats = Concatenate()(conv_features)
+            if len(conv_features) > 1:
+                conv_feats = Concatenate()(conv_features)
+            else:
+                conv_feats = conv_features[0]
             conv_outputs.append(conv_feats)
     conv_cell_out = Concatenate()(conv_outputs)
     return conv_cell_out
