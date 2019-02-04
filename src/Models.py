@@ -109,12 +109,13 @@ class BiLSTMCharCNNModel(InsincereModel):
         }
 
         # model inputs
-        chars_input = Input(shape=(max_sent_len, max_word_len), name='chars_input', dtype='int64')
-        char_feats_input = Input(shape=(max_sent_len, max_word_len, self.text_mapper.char_mapper.num_add_feats),
+        chars_input = Input(shape=(cps['max_sent_len'], cps['max_word_len']), name='chars_input', dtype='int64')
+        char_feats_input = Input(shape=(cps['max_sent_len'], cps['max_word_len'],
+                                        self.text_mapper.char_mapper.num_add_feats),
                                  name='chars_feats_input', dtype='float32')
         sent_feats_input = Input(shape=(self.text_mapper.num_sent_feats,), name="sent_feats_input", dtype='float32')
-        words_input = Input(shape=(max_sent_len,), name='words_input', dtype='int64')
-        words_feats_input = Input(shape=(max_sent_len, self.text_mapper.word_mapper.num_add_feats),
+        words_input = Input(shape=(cps['max_sent_len'],), name='words_input', dtype='int64')
+        words_feats_input = Input(shape=(cps['max_sent_len'], self.text_mapper.word_mapper.num_add_feats),
                                   name='words_feats_input', dtype='float32')
 
         model_inputs = {
@@ -206,7 +207,8 @@ class BiLSTMCharCNNModel(InsincereModel):
             #                                             output_dim=matrix_shape[1],
             #                                             input_length=max_sent_len,
             #                                             weights=[np.zeros(matrix_shape)],
-            #                                             todo: tune this regularizatio
+            #                                             todo: tune this regularization
+            #                                             todo: add function to turn training on/off (access by name)
             #                                             embeddings_regularizer=regularizers.l2(0.1),
             #                                             trainable=False,
             #                                             name='reg_word_emb')(inputs['words_input'])
@@ -259,7 +261,8 @@ def conv_cell(input_layers, conv_kernels=[[32, 1], [32, 2], [32, 3], [32, 4]]):
     conv_outputs = []
 
     for num_filter, kernel_size in conv_kernels:
-        # todo: consider adding output of bilstm back here - conv model is too weak, but we don't want to affect learning (turn off backprop?)
+        # todo: consider adding output of bilstm back here
+        # why is conv model weak? but we don't want to affect learning (turn off backprop?)
         for i in [input_layers]:
             char_conv = Conv1D(filters=num_filter, kernel_size=kernel_size)(i)
             batch_norm = BatchNormalization()(char_conv)
@@ -271,30 +274,3 @@ def conv_cell(input_layers, conv_kernels=[[32, 1], [32, 2], [32, 3], [32, 4]]):
             conv_outputs.append(conv_feats)
     conv_cell_out = Concatenate()(conv_outputs)
     return conv_cell_out
-
-# dev_size = config.get('dev_size')
-# data = DataV2()
-#
-# nlp = spacy.load('en_core_web_sm', disable=['parser', 'tagger', 'ner'])
-# corpus_info = CorpusInfo(data.get_questions(subset='train'), nlp)
-# word_counts = corpus_info.word_counts
-# char_counts = corpus_info.char_counts
-#
-# text_mapper = TextMapper(word_counts=word_counts, char_counts=char_counts, word_threshold=10, max_word_len=20,
-#                          char_threshold=350, max_sent_len=100, nlp=nlp, word_lowercase=True, char_lowercase=True)
-#
-# # embeddings = load_embeddings(word_counts, embedding_files)
-# # save_unknown_words(data, embeddings, max_words=200)
-# # models_all = list()
-# # for model in config.get('models'):
-# #     model_class = globals()[model.get('class')]
-# #     models_all.extend(cross_validate(model_class,
-# #                                      data,
-# #                                      embeddings,
-# #                                      model_config=model.get('args')))
-#
-# # model = CharCNNWordModel(data, corpus_info, text_mapper)
-# model = BiLSTMCharCNNModel(data, corpus_info, text_mapper)
-# model.define_model()
-# model.model.summary()
-# # # # #
