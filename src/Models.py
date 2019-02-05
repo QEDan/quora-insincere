@@ -230,7 +230,7 @@ class BiLSTMCharCNNModel(InsincereModel):
         # ensemble_weights = ensemble_weights_model(model_inputs, cps, word_emb, lstm_logits, conv_logits)
         #
         # ensemble_preds = Concatenate()([lstm_pred, conv_pred])
-        final_pred = Average()([lstm_pred, conv_pred])
+        final_pred = Average()([caps_pred, conv_pred])
 
         inputs = list(model_inputs.values())
         preds = [caps_pred, conv_pred, final_pred]
@@ -351,10 +351,10 @@ def char_level_feature_model(inputs, cps, outdim=128):
     conv_kernels = [[32, 1], [32, 2], [32, 3], [32, 4]]
     for num_filter, kernel_size in conv_kernels:
         char_conv = TimeDistributed(Conv1D(filters=num_filter, kernel_size=kernel_size))(char_rep)
-        # x = TimeDistributed(BatchNormalization())(char_conv)
-        # x = TimeDistributed(Activation('relu'))(x)
+        x = TimeDistributed(BatchNormalization())(char_conv)
+        x = TimeDistributed(Activation('relu'))(x)
         # x = TimeDistributed(Dropout(0.1))(x)
-        m = TimeDistributed(GlobalMaxPooling1D())(char_conv)
+        m = TimeDistributed(GlobalMaxPooling1D())(x)
         conv_outputs.append(m)
     conv_outs = Concatenate()(conv_outputs)
     # feats_1 = Dense(outdim)(conv_outs)
@@ -377,10 +377,10 @@ def conv_cell(input_layers, conv_kernels=[[32, 1], [32, 3], [32, 5], [32, 7]]):
         # why is conv model weak? but we don't want to affect learning (turn off backprop?)
         for i in input_layers:
             char_conv = Conv1D(filters=num_filter, kernel_size=kernel_size)(i)
-            # batch_norm = BatchNormalization()(char_conv)
-            # activation = Activation('relu')(batch_norm)
+            batch_norm = BatchNormalization()(char_conv)
+            activation = Activation('relu')(batch_norm)
             conv_features = []
-            conv_features.append(GlobalMaxPooling1D()(char_conv))
+            conv_features.append(GlobalMaxPooling1D()(activation))
             # conv_features.append(GlobalAveragePooling1D()(activation))
             if len(conv_features) > 1:
                 conv_feats = Concatenate()(conv_features)
