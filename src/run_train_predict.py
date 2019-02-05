@@ -249,7 +249,7 @@ def main():
     submit_preds = []
     for text_mapper, embedding in zip(text_mappers, embeddings):
     # embedding = embeddings[0]
-    # print("{} unknown words or of {}".format(len(embedding.unknown_words), len(embedding.word_map_list)))
+        print("{} unknown words out of {}".format(len(embedding.unknown_words), len(embedding.word_map_list)))
     # text_mapper = text_mappers[0]
         model = BiLSTMCharCNNModel(data=data, corpus_info=corpus_info, text_mapper=text_mapper, batch_size=128)
         model.set_embedding(embedding)

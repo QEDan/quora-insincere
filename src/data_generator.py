@@ -35,7 +35,7 @@ class DataGenerator(keras.utils.Sequence):
         # Generate data
         if self.labels is not None:
             X, y = self.__data_generation(indexes, return_y=True)
-            return X, [y, y, y]
+            return X, [y, y]
         else:
             X = self.__data_generation(indexes, return_y=False)
             return X

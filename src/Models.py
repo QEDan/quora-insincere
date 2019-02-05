@@ -172,7 +172,7 @@ def capsule(inputs, cps, word_emb):
     x = Capsule(num_capsule=10, dim_capsule=10, routings=4, share_weights=True)(x)
     x = Flatten()(x)
 
-    x = Dense(100, activation="linear", kernel_initializer=glorot_normal(seed=2019))(x)
+    x = Dense(64, activation="linear", kernel_initializer=glorot_normal(seed=2019))(x)
     x = BatchNormalization()(x)
     x = Activation('relu')(x)
     x = Dropout(0.2)(x)
@@ -230,10 +230,10 @@ class BiLSTMCharCNNModel(InsincereModel):
         # ensemble_weights = ensemble_weights_model(model_inputs, cps, word_emb, lstm_logits, conv_logits)
         #
         # ensemble_preds = Concatenate()([lstm_pred, conv_pred])
-        final_pred = Average()([caps_pred, conv_pred])
+        final_pred = Average()([lstm_pred, conv_pred])
 
         inputs = list(model_inputs.values())
-        preds = [caps_pred, conv_pred, final_pred]
+        preds = [lstm_pred, conv_pred]
         # preds = [lstm_pred, conv_pred, final_pred]
         self.model = Model(inputs=inputs, outputs=preds)
         return self.model

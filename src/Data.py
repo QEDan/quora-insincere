@@ -29,8 +29,8 @@ class Data:
         logging.info("Loading data...")
         if dev_size is not None:
             logging.warning("Using dev set of size=" + str(dev_size))
-        self.train_df = pd.read_csv(self.train_path, nrows=dev_size)
-        self.test_df = pd.read_csv(self.test_path, nrows=dev_size)
+        self.train_df = pd.read_csv(self.train_path, nrows=dev_size).head(1000)
+        self.test_df = pd.read_csv(self.test_path, nrows=dev_size).head(100)
         logging.info("Train shape : {}".format(self.train_df.shape))
         logging.info("Test shape : {}".format(self.test_df.shape))
 

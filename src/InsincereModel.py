@@ -121,7 +121,7 @@ class InsincereModel:
         callbacks = self._get_callbacks(config.get('epochs'), config.get('batch_size'))
 
         batch_size = [64, 128, 256]
-        loss_weights = [[1, 1, 0], [1, 1, 0], [1, 1, 0]]
+        loss_weights = [[1, 1], [1, 1], [1, 1]]
         epsilon = [1e-7, 1e-6, 1e-5]
         fraction_of_training = [1/4, 1/2, 3/4]
         lr = [0.001, 0.001, 0.0003]
@@ -138,7 +138,7 @@ class InsincereModel:
             self.model.compile(loss=self.loss, loss_weights=loss_weights[i],
                                optimizer=Adam(lr=lr[i]), metrics=[self.f1_score])
             self.model.fit_generator(generator=train_generator, steps_per_epoch=steps_per_epoch,
-                                     verbose=1, callbacks=callbacks,
+                                     verbose=2, callbacks=callbacks,
                                      validation_data=val_generator,
                                      max_queue_size=10,
                                      workers=1,
@@ -177,7 +177,9 @@ class InsincereModel:
         # preds = self.predict(input_x)
         data_gen = DataGenerator(text=questions, text_mapper=self.text_mapper, shuffle=False)
         preds = self.model.predict_generator(data_gen, workers=1, use_multiprocessing=False, max_queue_size=10)
-        return preds[2][:, 0]
+        preds_np = np.array(preds)[:, :, 0]
+        avg_pred = preds_np.mean(axis=0)
+        return avg_pred
 
     def print_curve(self, filename='training_curve.png'):
         plt.plot(self.history.history['loss'])

@@ -150,7 +150,7 @@ class SymbolMapper:
         self.vocab = [symbol for symbol, count in symbol_counts if count >= self.threshold]
         self.vocab = self.BASE_ALPHABET + self.vocab
 
-        self.init_mappings(False)
+        self.init_mappings(True)
 
     def init_mappings(self, check_coverage=True):
 
