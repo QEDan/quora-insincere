@@ -11,9 +11,85 @@ from keras import initializers, regularizers, constraints, optimizers, layers
 from keras.layers import Layer
 from keras.layers import TimeDistributed, Embedding as EmbeddingLayer, Bidirectional, CuDNNLSTM, Dense, Conv1D
 from keras.layers import GlobalMaxPooling1D, Concatenate, BatchNormalization, Dropout, SpatialDropout1D, CuDNNGRU
-from keras.layers import GlobalAveragePooling1D, Add, Activation, Average, Maximum, Multiply, Dot
+from keras.layers import GlobalAveragePooling1D, Add, Activation, Average, Maximum, Multiply, Dot, Flatten
+from keras.initializers import glorot_normal
+from keras.initializers import orthogonal
 import keras.backend as K
 import numpy as np
+import tensorflow as tf
+
+
+def squash(x, axis=-1):
+    # s_squared_norm is really small
+    # s_squared_norm = K.sum(K.square(x), axis, keepdims=True) + K.epsilon()
+    # scale = K.sqrt(s_squared_norm)/ (0.5 + s_squared_norm)
+    # return scale * x
+    s_squared_norm = K.sum(K.square(x), axis, keepdims=True)
+    scale = K.sqrt(s_squared_norm + K.epsilon())
+    return x / scale
+
+# A Capsule Implement with Pure Keras
+class Capsule(Layer):
+    def __init__(self, num_capsule, dim_capsule, routings=3, kernel_size=(9, 1), share_weights=True,
+                 activation='default', **kwargs):
+        super(Capsule, self).__init__(**kwargs)
+        self.num_capsule = num_capsule
+        self.dim_capsule = dim_capsule
+        self.routings = routings
+        self.kernel_size = kernel_size
+        self.share_weights = share_weights
+        if activation == 'default':
+            self.activation = squash
+        else:
+            self.activation = Activation(activation)
+
+    def build(self, input_shape):
+        super(Capsule, self).build(input_shape)
+        input_dim_capsule = input_shape[-1]
+        if self.share_weights:
+            self.W = self.add_weight(name='capsule_kernel',
+                                     shape=(1, input_dim_capsule,
+                                            self.num_capsule * self.dim_capsule),
+                                     # shape=self.kernel_size,
+                                     initializer='glorot_uniform',
+                                     trainable=True)
+        else:
+            input_num_capsule = input_shape[-2]
+            self.W = self.add_weight(name='capsule_kernel',
+                                     shape=(input_num_capsule,
+                                            input_dim_capsule,
+                                            self.num_capsule * self.dim_capsule),
+                                     initializer='glorot_uniform',
+                                     trainable=True)
+
+    def call(self, u_vecs):
+        if self.share_weights:
+            u_hat_vecs = K.conv1d(u_vecs, self.W)
+        else:
+            u_hat_vecs = K.local_conv1d(u_vecs, self.W, [1], [1])
+
+        batch_size = K.shape(u_vecs)[0]
+        input_num_capsule = K.shape(u_vecs)[1]
+        u_hat_vecs = K.reshape(u_hat_vecs, (batch_size, input_num_capsule,
+                                            self.num_capsule, self.dim_capsule))
+        u_hat_vecs = K.permute_dimensions(u_hat_vecs, (0, 2, 1, 3))
+        # final u_hat_vecs.shape = [None, num_capsule, input_num_capsule, dim_capsule]
+
+        b = K.zeros_like(u_hat_vecs[:, :, :, 0])  # shape = [None, num_capsule, input_num_capsule]
+        for i in range(self.routings):
+            b = K.permute_dimensions(b, (0, 2, 1))  # shape = [None, input_num_capsule, num_capsule]
+            c = K.softmax(b)
+            c = K.permute_dimensions(c, (0, 2, 1))
+            b = K.permute_dimensions(b, (0, 2, 1))
+            outputs = self.activation(tf.keras.backend.batch_dot(c, u_hat_vecs, [2, 2]))
+            if i < self.routings - 1:
+                b = tf.keras.backend.batch_dot(outputs, u_hat_vecs, [2, 3])
+
+        return outputs
+
+    def compute_output_shape(self, input_shape):
+        return (None, self.num_capsule, self.dim_capsule)
+
 
 # https://www.kaggle.com/suicaokhoailang/lstm-attention-baseline-0-652-lb
 
@@ -87,6 +163,23 @@ class Attention(Layer):
         return input_shape[0],  self.features_dim
 
 
+def capsule(inputs, cps, word_emb):
+    word_rep = word_rep_with_char_info(inputs, cps, word_emb)
+    x = Bidirectional(CuDNNGRU(100, return_sequences=True,
+                               kernel_initializer=glorot_normal(seed=2019),
+                               recurrent_initializer=orthogonal(gain=1.0, seed=1337)))(word_rep)
+
+    x = Capsule(num_capsule=10, dim_capsule=10, routings=4, share_weights=True)(x)
+    x = Flatten()(x)
+
+    x = Dense(100, activation="linear", kernel_initializer=glorot_normal(seed=2019))(x)
+    x = BatchNormalization()(x)
+    x = Activation('relu')(x)
+    x = Dropout(0.2)(x)
+
+    x = Dense(1, activation="sigmoid")(x)
+    return x
+
 class BiLSTMCharCNNModel(InsincereModel):
     """
     notes:
@@ -132,13 +225,16 @@ class BiLSTMCharCNNModel(InsincereModel):
         lstm_pred, lstm_logits = lstm_model(model_inputs, cps, word_emb)
         conv_pred, conv_logits = conv_model(model_inputs, cps, word_emb)
 
-        ensemble_weights = ensemble_weights_model(model_inputs, cps, word_emb, lstm_logits, conv_logits)
+        caps_pred = capsule(model_inputs, cps, word_emb)
 
-        ensemble_preds = Concatenate()([lstm_pred, conv_pred])
-        final_pred = Dot(axes=-1)([ensemble_weights, ensemble_preds])
+        # ensemble_weights = ensemble_weights_model(model_inputs, cps, word_emb, lstm_logits, conv_logits)
+        #
+        # ensemble_preds = Concatenate()([lstm_pred, conv_pred])
+        final_pred = Average()([lstm_pred, conv_pred])
 
         inputs = list(model_inputs.values())
-        preds = [lstm_pred, conv_pred, final_pred]
+        preds = [caps_pred, conv_pred, final_pred]
+        # preds = [lstm_pred, conv_pred, final_pred]
         self.model = Model(inputs=inputs, outputs=preds)
         return self.model
 
@@ -180,6 +276,8 @@ class BiLSTMCharCNNModel(InsincereModel):
         return word_emb
 
 
+
+
 def lstm_model(inputs, cps, word_emb):
     word_rep = word_rep_with_char_info(inputs, cps, word_emb)
     x = Bidirectional(CuDNNLSTM(64, return_sequences=True))(word_rep)
@@ -191,16 +289,16 @@ def lstm_model(inputs, cps, word_emb):
 
 def conv_model(inputs, cps, word_emb):
     word_rep = word_rep_with_char_info(inputs, cps, word_emb)
-    conv_cell_out = conv_cell(word_rep)
+    bilstm = Bidirectional(CuDNNLSTM(64, return_sequences=True))(word_rep)
+    conv_cell_out = conv_cell([bilstm, word_rep])
 
     # add additional sentence features? can comment in/out
     conv_cell_out = Concatenate()([conv_cell_out, inputs['sent_feats_input']])
 
-    # conv_out = Concatenate()([conv_out, sent_feats_input])
-    conv_dense = Dense(64, activation='relu')(conv_cell_out)
-    # maybe add another dense layer?
-    conv_dense = Dropout(0.2)(conv_dense)
-    conv_logits = Dense(1, activation='linear')(conv_dense)
+    # conv_dense = Dense(64, activation='relu')(conv_cell_out)
+    # # maybe add another dense layer?
+    # conv_dense = Dropout(0.2)(conv_dense)
+    conv_logits = Dense(1, activation='linear')(conv_cell_out)
     conv_pred = Activation('sigmoid', name='conv_pred')(conv_logits)
     return conv_pred, conv_logits
 
@@ -209,15 +307,16 @@ def ensemble_weights_model(inputs, cps, word_emb, lstm_logits, conv_logits):
     # todo: make this simpler
 
     word_rep = word_rep_with_char_info(inputs, cps, word_emb)
-    x = Bidirectional(CuDNNLSTM(16, return_sequences=True))(word_rep)
-    conv_cell_out = conv_cell([x, word_rep])
+    # x = Bidirectional(CuDNNLSTM(16, return_sequences=True))(word_rep)
+    # conv_cell_out = conv_cell([x, word_rep])
 
     # add additional sentence features? can comment in/out
-    conv_cell_out = Concatenate()([conv_cell_out, inputs['sent_feats_input'],
-                                   lstm_logits, conv_logits])
+    # conv_cell_out = Concatenate()([conv_cell_out, inputs['sent_feats_input'],
+    #                                lstm_logits, conv_logits])
 
-    conv_dense = Dense(32, activation='relu')(conv_cell_out)
-    ensemble_weights = Dense(2, activation='softmax')(conv_dense)
+    # conv_dense = Dense(32, activation='relu')(conv_cell_out)
+
+    ensemble_weights = Dense(2, activation='softmax')(inputs['sent_feats_input'])
     return ensemble_weights
 
 
@@ -232,7 +331,7 @@ def word_rep_with_char_info(inputs, cps, word_emb):
     #                                           input_length=max_sent_len)(words_input)
     # trainable_char_embedding = SpatialDropout1D(0.1)(trainable_char_embedding)
 
-    word_emb = SpatialDropout1D(0.1)(word_emb)
+    word_emb = SpatialDropout1D(0.2)(word_emb)
     word_rep = Concatenate()([char_features, word_emb, inputs["words_feats_input"]])
     # word_rep = Concatenate()([char_features, word_emb, inputs["words_feats_input"], trainable_conv_embedding])
 
@@ -252,23 +351,23 @@ def char_level_feature_model(inputs, cps, outdim=128):
     conv_kernels = [[32, 1], [32, 2], [32, 3], [32, 4]]
     for num_filter, kernel_size in conv_kernels:
         char_conv = TimeDistributed(Conv1D(filters=num_filter, kernel_size=kernel_size))(char_rep)
-        x = TimeDistributed(BatchNormalization())(char_conv)
-        x = TimeDistributed(Activation('relu'))(x)
+        # x = TimeDistributed(BatchNormalization())(char_conv)
+        # x = TimeDistributed(Activation('relu'))(x)
         # x = TimeDistributed(Dropout(0.1))(x)
-        m = TimeDistributed(GlobalMaxPooling1D())(x)
+        m = TimeDistributed(GlobalMaxPooling1D())(char_conv)
         conv_outputs.append(m)
     conv_outs = Concatenate()(conv_outputs)
-    feats_1 = Dense(outdim)(conv_outs)
-    feats_1 = BatchNormalization()(feats_1)
-    feats_1 = Activation('relu')(feats_1)
+    # feats_1 = Dense(outdim)(conv_outs)
+    # feats_1 = BatchNormalization()(feats_1)
+    # feats_1 = Activation('relu')(feats_1)
     # feats_2 = Dense(outdim)(feats_1)
     # feats_2 = BatchNormalization()(feats_2)
     # feats_2 = Activation('relu')(feats_2)
     # x = Concatenate()([feats_1, feats_2])
-    return feats_1
+    return conv_outs
 
 
-def conv_cell(input_layers, conv_kernels=[[32, 1], [32, 2], [32, 3], [32, 4]]):
+def conv_cell(input_layers, conv_kernels=[[32, 1], [32, 3], [32, 5], [32, 7]]):
     conv_outputs = []
 
     if not isinstance(input_layers, list):
@@ -278,10 +377,10 @@ def conv_cell(input_layers, conv_kernels=[[32, 1], [32, 2], [32, 3], [32, 4]]):
         # why is conv model weak? but we don't want to affect learning (turn off backprop?)
         for i in input_layers:
             char_conv = Conv1D(filters=num_filter, kernel_size=kernel_size)(i)
-            batch_norm = BatchNormalization()(char_conv)
-            activation = Activation('relu')(batch_norm)
+            # batch_norm = BatchNormalization()(char_conv)
+            # activation = Activation('relu')(batch_norm)
             conv_features = []
-            conv_features.append(GlobalMaxPooling1D()(activation))
+            conv_features.append(GlobalMaxPooling1D()(char_conv))
             # conv_features.append(GlobalAveragePooling1D()(activation))
             if len(conv_features) > 1:
                 conv_feats = Concatenate()(conv_features)

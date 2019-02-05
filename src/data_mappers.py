@@ -8,7 +8,7 @@ class TextMapper:
     """ Maps text into model input x """
 
     def __init__(self, word_counts, char_counts, nlp, max_sent_len=100, word_threshold=10, word_lowercase=False,
-                 max_word_len=12, char_threshold=5, char_lowercase=False):
+                 max_word_len=12, char_threshold=5, char_lowercase=False, letters_only=False):
         """
         :param word_counts: list of tuples of (word, count)
         :param nlp: from pre-loaded spaCy
@@ -21,7 +21,7 @@ class TextMapper:
         self.word_mapper = WordMapper(word_counts=word_counts, threshold=word_threshold,
                                       word_lowercase=word_lowercase)
         self.char_mapper = CharMapper(char_counts=char_counts, threshold=char_threshold,
-                                      char_lowercase=char_lowercase)
+                                      char_lowercase=char_lowercase, letters_only=False)
 
         self.max_sent_len = max_sent_len
         self.max_word_len = max_word_len
@@ -145,10 +145,12 @@ class SymbolMapper:
         self.ix_to_symbol = dict()
 
         symbol_counts = sorted(symbol_counts, key=lambda x: x[1], reverse=True)
+
+        # initialize alphabet
         self.vocab = [symbol for symbol, count in symbol_counts if count >= self.threshold]
         self.vocab = self.BASE_ALPHABET + self.vocab
 
-        self.init_mappings(threshold)
+        self.init_mappings(False)
 
     def init_mappings(self, check_coverage=True):
 
@@ -163,6 +165,11 @@ class SymbolMapper:
 
     def print_bot_n_symbols(self, n=10):
         print([(symbol, count) for symbol, count in self.symbol_counts if count >= self.threshold][-n:])
+
+    def add_symbols_to_map(self, add_vocab):
+        missing_from_current_vocab = set(self.vocab) - set(add_vocab)
+        self.vocab = self.vocab + list(missing_from_current_vocab)
+        self.init_mappings()
 
     def get_symbol_index(self, symbol):
         if self.lowercase:
@@ -207,9 +214,13 @@ class WordMapper(SymbolMapper):
     def print_coverage_statistics(self, symbols_name='words'):
         super().print_coverage_statistics(symbols_name)
 
+    def set_vocab(self, vocab_list):
+        self.vocab = vocab_list
+        self.init_mappings(True)
+
     def get_add_features(self, word):
         add_feats = np.zeros(self.num_add_feats)
-        add_feats[0] = len(word) / 10
+        add_feats[0] = math.log(len(word))
         # if char in self.puncutation_list:
         #     add_feats[2] = 1
         return add_feats

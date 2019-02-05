@@ -53,7 +53,7 @@ def write_predictions(data, preds, thresh=0.5):
     preds = (preds > thresh).astype(int)
     out_df = pd.DataFrame({"qid": data.test_df["qid"].values})
     out_df['prediction'] = preds
-    out_df.to_csv("submission.csv", index=False)
+    return out_df
 
 
 def print_diagnostics(y_true, y_pred, file_suffix='', persist=True):
@@ -142,10 +142,10 @@ def cross_validate(model_class, data, embeddings, n_splits=4, show_wrongest=True
     return models
 
 
-def load_embeddings(word_vocab, embedding_files, keep_index=True):
+def load_embeddings(word_counts, word_threshold, embedding_files, keep_index=True):
     embeddings = list()
     for f in embedding_files:
-        embeddings.append(Embedding(word_vocab=word_vocab))
+        embeddings.append(Embedding(word_counts, word_threshold))
         embeddings[-1].load(f)
         if not keep_index:
             embeddings[-1].cleanup_index()
@@ -185,8 +185,9 @@ def save_configs():
 
 
 def main():
-    word_threshold = 5
-    char_threshold = 50
+    word_threshold = 8
+    char_threshold = 15
+    fix_unknowns = False
 
     embedding_files = config.get('embedding_files')
     dev_size = config.get('dev_size')
@@ -198,7 +199,7 @@ def main():
 
     nlp = spacy.load('en', disable=['parser', 'tagger', 'ner'])
 
-    ci_path = '/home/matt_kierans/ci.p'
+    ci_path = '/home/matt/ci.p'
     if os.path.isfile(ci_path):
         corpus_info = pickle.load(open(ci_path, 'rb'))
     else:
@@ -208,67 +209,73 @@ def main():
     word_counts = corpus_info.word_counts
     char_counts = corpus_info.char_counts
 
-    text_mapper = TextMapper(word_counts=word_counts, char_counts=char_counts, word_threshold=word_threshold,
-                             max_word_len=15, char_threshold=char_threshold, max_sent_len=70, nlp=nlp,
-                             word_lowercase=True, char_lowercase=True)
+    emb_path = f'/home/matt/emb{word_threshold}.p'
+    unk_emb_path = f'/home/matt/emb_unk{word_threshold}.p'
+    text_mapper_path = f'/home/matt/text_map{word_threshold}.p'
 
-    word_vocab = text_mapper.get_words_vocab()
-    emb_path = f'/home/matt_kierans/emb{word_threshold}.p'
-    unk_emb_path = f'/home/matt_kierans/emb_unk{word_threshold}.p'
-
-    if os.path.isfile(unk_emb_path):
+    if os.path.isfile(unk_emb_path) and os.path.isfile(text_mapper_path):
         embeddings = pickle.load(open(unk_emb_path, 'rb'))
+        text_mappers = pickle.load(open(text_mapper_path, 'rb'))
     else:
         if os.path.isfile(emb_path):
             embeddings = pickle.load(open(emb_path, 'rb'))
         else:
-            embeddings = load_embeddings(word_vocab, embedding_files)
+            embeddings = load_embeddings(word_counts, word_threshold, embedding_files)
             # pickle.dump(embeddings, open(emb_path, 'wb'))
 
+        text_mappers = []
+
         unknown_char_mapper = CharMapper(char_counts=char_counts, threshold=10, char_lowercase=True)
-        unknown_char_len = 20
-        unknown_word_models = [UnknownWords(char_mapper=unknown_char_mapper, max_word_len=unknown_char_len,
-                                            word_vocab=word_vocab, embedding=embedding) for embedding in embeddings]
-        for model in unknown_word_models:
-            model.define_model()
-            model.fit()
-            model.improve_embedding()
+        for ind, embedding in enumerate(embeddings):
+            text_mapper = TextMapper(word_counts=word_counts, char_counts=char_counts,
+                                     word_threshold=word_threshold,
+                                     max_word_len=15, char_threshold=char_threshold, max_sent_len=70, nlp=nlp,
+                                     word_lowercase=True, char_lowercase=True)
+            text_mapper.word_mapper.set_vocab(embedding.word_map_list)
+            text_mappers.append(text_mapper)
+
+            if fix_unknowns:
+                unknown_char_len = 20
+                unknown_word_model = UnknownWords(char_mapper=unknown_char_mapper, max_word_len=unknown_char_len,
+                                                  embedding=embedding, text_mapper=text_mapper)
+                unknown_word_model.define_model()
+                unknown_word_model.fit()
+                unknown_word_model.improve_embedding()
+
         # pickle.dump(embeddings, open(unk_emb_path, 'wb'))
+        # pickle.dump(text_mappers, open(text_mapper_path, 'wb'))
 
-    model = BiLSTMCharCNNModel(data=data, corpus_info=corpus_info, text_mapper=text_mapper, batch_size=128)
-    model.blend_embeddings(embeddings)
+    preds = []
+    submit_preds = []
+    for text_mapper, embedding in zip(text_mappers, embeddings):
+    # embedding = embeddings[0]
+    # print("{} unknown words or of {}".format(len(embedding.unknown_words), len(embedding.word_map_list)))
+    # text_mapper = text_mappers[0]
+        model = BiLSTMCharCNNModel(data=data, corpus_info=corpus_info, text_mapper=text_mapper, batch_size=128)
+        model.set_embedding(embedding)
+        model.define_model()
+        model.fit()
 
-    model.define_model()
-    # model.model.summary()
-    # a = DataGenerator(text=data.train_qs, labels=data.train_labels,
-    #                   text_mapper=text_mapper, batch_size=16)
+        test_preds = model.predict_subset('test')
+        submit_preds.append(test_preds)
 
-    model.fit()
+        val_preds = model.predict_subset(subset='val')
+        preds.append(val_preds)
 
-    # cleanup_models([model])  # embedding/memory cleanup
+    val_preds_np = np.array(preds)
+    val_preds_y = val_preds_np.mean(axis=0)
 
-    val_preds = model.predict_subset(subset='val')
-
-    # ensemble_cv = Ensemble(m odels_all)
-    # train_X = [data.train_X]
-    # val_X = [data.val_X]
-    # test_X = [data.test_X]
-    # if data.custom_features:
-    #     train_X += [data.train_features]
-    #     val_X += [data.val_features]
-    #     test_X += [data.test_features]
-
-    # find the best threshold
-
-    # pred_train_y = ensemble_cv.predict_linear_regression(train_X, data.train_y, train_X)
     val_y = np.array(data.val_labels)
-    thresh = find_best_threshold(val_preds, val_y)
+    thresh = find_best_threshold(val_preds_y, val_y)
 
     # pred_val_y = ensemble_cv.predict_linear_regression(train_X, data.train_y, val_X)
-    print_diagnostics(val_y, (val_preds > thresh).astype(int))
+    print_diagnostics(val_y, (val_preds_y > thresh).astype(int))
     # pred_y_test = ensemble_cv.predict_linear_regression(train_X, data.train_y, test_X)
-    pred_y_test = model.predict_subset('test')
-    write_predictions(data, pred_y_test, thresh)
+
+    submit_preds_np = np.array(submit_preds)
+    submit_preds_y = submit_preds_np.mean(axis=0)
+
+    write_predictions(data, submit_preds_y, thresh)
 
 
 if __name__ == "__main__":

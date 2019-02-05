@@ -9,14 +9,17 @@ from gensim.models import KeyedVectors
 
 
 class Embedding:
-    def __init__(self, word_vocab):
+    def __init__(self, word_counts, word_threshold):
         self.embeddings_index = None
         self.nb_words = None
         self.embed_size = None
         self.embedding_matrix = None
-        self.word_vocab = word_vocab
+        self.word_counts = word_counts
+        self.word_threshold = word_threshold
+        self.word_map_list = list()
         self.name = None
         self.unknown_words = list()
+        self.known_words = list()
 
     def load(self, embedding_file='../input/embeddings/glove.840B.300d/glove.840B.300d.txt'):
         logging.info("loading embedding : " + embedding_file)
@@ -61,18 +64,29 @@ class Embedding:
         emb_mean, emb_std = all_embs.mean(), all_embs.std()
         self.embed_size = all_embs.shape[1]
 
-        self.nb_words = len(self.word_vocab)
-        self.embedding_matrix = np.zeros((self.nb_words, self.embed_size))
-        for ind, word in enumerate(self.word_vocab):
-            if word == '<UNK>':
-                embedding_vector = np.random.normal(emb_mean, emb_std, (1, self.embed_size))[0]
-            else:
-                embedding_vector = self.embeddings_index.get(word)
+
+        # count padding and unknown as part of vocab so start from 2
+        self.word_map_list.append('<PAD>')
+        self.word_map_list.append('<UNK>')
+        for word, count in self.word_counts[2:]:
+            if self.embeddings_index.get(word) is not None or count >= self.word_threshold:
+                self.word_map_list.append(word)
+
+        self.nb_words = len(self.word_map_list)
+        self.embedding_matrix = np.random.normal(emb_mean, emb_std, (self.nb_words, self.embed_size))
+        self.embedding_matrix[0] = np.zeros(self.embed_size)
+
+        # this might not be a good idea
+        # self.embedding_matrix[1] = all_embs.mean(axis=0)
+        for ind, word in enumerate(self.word_map_list[2:], 2):
+            embedding_vector = self.embeddings_index.get(word)
             if embedding_vector is not None:
                 self.embedding_matrix[ind] = embedding_vector
+                self.known_words.append(word)
             else:
                 self.unknown_words.append(word)
-        # self.cleanup_index()
+
+        self.cleanup_index()
 
     def get_embedding_matrix(self):
         return self.embedding_matrix

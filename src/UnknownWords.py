@@ -6,13 +6,14 @@ from sklearn.model_selection import train_test_split
 
 
 class UnknownWords:
-    def __init__(self, char_mapper, embedding, word_vocab, max_word_len,
+    def __init__(self, char_mapper, embedding, word_vocab, max_word_len, text_mapper,
                  loss='mean_squared_error'):
         self.char_mapper = char_mapper
         self.max_word_len = max_word_len
         self.embedding = embedding
         self.word_vocab = word_vocab
         self.loss = loss
+        self.text_mapper = text_mapper
         self.model = None
 
     def word_to_x(self, word):
@@ -39,16 +40,16 @@ class UnknownWords:
         return self.model
 
     def training_data(self):
-        known_words = [word for word in self.word_vocab if self.embedding.embeddings_index.get(word) is not None]
+        known_words = self.embedding.known_words
         known_words_x = np.array([self.word_to_x(word) for word in known_words])
         known_words_y = np.array([self.embedding.embeddings_index.get(word) for word in known_words])
-        train_X, val_X, train_y, val_y = train_test_split(known_words_x, known_words_y, test_size=0.1)
+        train_X, val_X, train_y, val_y = train_test_split(known_words_x, known_words_y, test_size=0.02)
         return train_X, val_X, train_y, val_y
 
     def fit(self):
         logging.info('Fitting UnknownWords model...')
         train_X, val_X, train_y, val_y = self.training_data()
-        self.model.fit(x=train_X, y=train_y, epochs=4, batch_size=128, verbose=2, validation_data=(val_X, val_y))
+        self.model.fit(x=train_X, y=train_y, epochs=4, batch_size=16, verbose=2, validation_data=(val_X, val_y))
 
     def predict(self, words):
         input_x = np.array([self.word_to_x(word) for word in words])
@@ -57,7 +58,8 @@ class UnknownWords:
 
     def improve_embedding(self):
         logging.info('Improving unknown embeddings with predicted values...')
-        for i, word in enumerate(self.word_vocab[2:], 2):  # skip padding and unknown tokens
-            if self.embedding.embeddings_index.get(word) is None:
-                pred_embedding = self.predict(np.array([word]))
-                self.embedding.embedding_matrix[i] = pred_embedding[0]
+        unknown_words = self.embedding.unknown_words
+        for word in unknown_words:
+            matrix_ind = self.text_mapper.get_word_ind(word)
+            pred_embedding = self.predict(np.array([word]))
+            self.embedding.embedding_matrix[matrix_ind] = pred_embedding[0]

@@ -36,7 +36,6 @@ class Data:
 
     def split(self):
         self.train_qs, self.val_qs, self.train_labels, self.val_labels = self.get_training_split()
-        return self.train_qs, self.val_qs, self.train_labels, self.val_labels
 
     def perform_preprocessing(self):
         self.train_df['question_text'] = self.preprocessing(self.train_df['question_text'])

@@ -3,6 +3,7 @@ import logging
 import matplotlib.pyplot as plt
 import numpy as np
 from keras.callbacks import EarlyStopping, ModelCheckpoint
+from keras.optimizers import Adam
 
 from src.Embedding import Embedding
 from src.LRFinder import LRFinder
@@ -120,20 +121,22 @@ class InsincereModel:
         callbacks = self._get_callbacks(config.get('epochs'), config.get('batch_size'))
 
         batch_size = [64, 128, 256]
-        loss_weights = [[1, 1, 0.2], [1, 1, 1], [0.2, 0.2, 1]]
+        loss_weights = [[1, 1, 0], [1, 1, 0], [1, 1, 0]]
         epsilon = [1e-7, 1e-6, 1e-5]
-        fraction_of_training = [1/4, 1/2, 1]
+        fraction_of_training = [1/4, 1/2, 3/4]
+        lr = [0.001, 0.001, 0.0003]
         # todo: write this in a for loop and change batch size, learning rate, and epsilon (K.set_epsilon(1e-2))
         # todo: optimize learning rates
         # todo: experiment with epsilon smoothing
         for i in range(3):
             train_generator.batch_size = batch_size[i]
             steps_per_epoch = int(len(train_generator)*fraction_of_training[i])
+
             # only if time allows more experimentation
             # K.set_epsilon(epsilon[i])
 
             self.model.compile(loss=self.loss, loss_weights=loss_weights[i],
-                               optimizer='adam', metrics=[self.f1_score])
+                               optimizer=Adam(lr=lr[i]), metrics=[self.f1_score])
             self.model.fit_generator(generator=train_generator, steps_per_epoch=steps_per_epoch,
                                      verbose=1, callbacks=callbacks,
                                      validation_data=val_generator,
