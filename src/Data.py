@@ -29,13 +29,17 @@ class Data:
         logging.info("Loading data...")
         if dev_size is not None:
             logging.warning("Using dev set of size=" + str(dev_size))
-        self.train_df = pd.read_csv(self.train_path, nrows=dev_size).head(1000)
-        self.test_df = pd.read_csv(self.test_path, nrows=dev_size).head(100)
+        self.train_df = pd.read_csv(self.train_path, nrows=dev_size)
+        self.test_df = pd.read_csv(self.test_path, nrows=dev_size)
         logging.info("Train shape : {}".format(self.train_df.shape))
         logging.info("Test shape : {}".format(self.test_df.shape))
 
-    def split(self):
-        self.train_qs, self.val_qs, self.train_labels, self.val_labels = self.get_training_split()
+    def split(self, train_full=False):
+        if train_full:
+            self.train_qs = self.get_questions()
+            self.train_labels = self.get_training_labels()
+        else:
+            self.train_qs, self.val_qs, self.train_labels, self.val_labels = self.get_training_split()
 
     def perform_preprocessing(self):
         self.train_df['question_text'] = self.preprocessing(self.train_df['question_text'])

@@ -165,20 +165,21 @@ class Attention(Layer):
 
 def capsule(inputs, cps, word_emb):
     word_rep = word_rep_with_char_info(inputs, cps, word_emb)
-    x = Bidirectional(CuDNNGRU(100, return_sequences=True,
+    x = Bidirectional(CuDNNGRU(50, return_sequences=True,
                                kernel_initializer=glorot_normal(seed=2019),
                                recurrent_initializer=orthogonal(gain=1.0, seed=1337)))(word_rep)
 
-    x = Capsule(num_capsule=10, dim_capsule=10, routings=4, share_weights=True)(x)
+    x = Capsule(num_capsule=15, dim_capsule=15, routings=4, share_weights=True)(x)
     x = Flatten()(x)
 
-    x = Dense(64, activation="linear", kernel_initializer=glorot_normal(seed=2019))(x)
+    x = Dense(16, activation="linear", kernel_initializer=glorot_normal(seed=2019))(x)
     x = BatchNormalization()(x)
     x = Activation('relu')(x)
-    x = Dropout(0.2)(x)
+    # x = Dropout(0.1)(x)
 
     x = Dense(1, activation="sigmoid")(x)
     return x
+
 
 class BiLSTMCharCNNModel(InsincereModel):
     """
@@ -230,11 +231,11 @@ class BiLSTMCharCNNModel(InsincereModel):
         # ensemble_weights = ensemble_weights_model(model_inputs, cps, word_emb, lstm_logits, conv_logits)
         #
         # ensemble_preds = Concatenate()([lstm_pred, conv_pred])
-        final_pred = Average()([lstm_pred, conv_pred])
+        # final_pred = Average()([caps_pred, conv_pred])
 
         inputs = list(model_inputs.values())
-        preds = [lstm_pred, conv_pred]
-        # preds = [lstm_pred, conv_pred, final_pred]
+        preds = [lstm_pred, conv_pred, caps_pred]
+        # preds = [caps_pred]
         self.model = Model(inputs=inputs, outputs=preds)
         return self.model
 
@@ -276,8 +277,6 @@ class BiLSTMCharCNNModel(InsincereModel):
         return word_emb
 
 
-
-
 def lstm_model(inputs, cps, word_emb):
     word_rep = word_rep_with_char_info(inputs, cps, word_emb)
     x = Bidirectional(CuDNNLSTM(64, return_sequences=True))(word_rep)
@@ -289,13 +288,13 @@ def lstm_model(inputs, cps, word_emb):
 
 def conv_model(inputs, cps, word_emb):
     word_rep = word_rep_with_char_info(inputs, cps, word_emb)
-    bilstm = Bidirectional(CuDNNLSTM(64, return_sequences=True))(word_rep)
-    conv_cell_out = conv_cell([bilstm, word_rep])
+    bilstm = Bidirectional(CuDNNLSTM(50, return_sequences=True))(word_rep)
+    conv_cell_out = conv_cell([bilstm])
 
     # add additional sentence features? can comment in/out
     conv_cell_out = Concatenate()([conv_cell_out, inputs['sent_feats_input']])
 
-    # conv_dense = Dense(64, activation='relu')(conv_cell_out)
+    # conv_dense = Dense(8, activation='relu')(conv_cell_out)
     # # maybe add another dense layer?
     # conv_dense = Dropout(0.2)(conv_dense)
     conv_logits = Dense(1, activation='linear')(conv_cell_out)
@@ -341,14 +340,15 @@ def word_rep_with_char_info(inputs, cps, word_emb):
 def char_level_feature_model(inputs, cps, outdim=128):
 
     chars_words_embedding = TimeDistributed(EmbeddingLayer(cps['char_vocab_size'],
-                                                           output_dim=16,
+                                                           output_dim=10,
                                                            # embeddings_regularizer=regularizers.l1(),
                                                            input_length=cps['max_word_len']))(inputs['chars_input'])
-    x = TimeDistributed(SpatialDropout1D(0.1))(chars_words_embedding)
-    char_rep = Concatenate()([x, inputs['char_feats_input']])
+    # x = TimeDistributed(SpatialDropout1D(0.1))(chars_words_embedding)
+    char_rep = Concatenate()([chars_words_embedding, inputs['char_feats_input']])
+    # char_rep = inputs['char_feats_input']
     conv_outputs = []
     # todo: tune these conv kernels
-    conv_kernels = [[32, 1], [32, 2], [32, 3], [32, 4]]
+    conv_kernels = [[8, 1], [8, 3], [8, 5]]
     for num_filter, kernel_size in conv_kernels:
         char_conv = TimeDistributed(Conv1D(filters=num_filter, kernel_size=kernel_size))(char_rep)
         x = TimeDistributed(BatchNormalization())(char_conv)
@@ -367,9 +367,8 @@ def char_level_feature_model(inputs, cps, outdim=128):
     return conv_outs
 
 
-def conv_cell(input_layers, conv_kernels=[[32, 1], [32, 3], [32, 5], [32, 7]]):
+def conv_cell(input_layers, conv_kernels=[[4, 1], [4, 3], [2, 5]]):
     conv_outputs = []
-
     if not isinstance(input_layers, list):
         input_layers = [input_layers]
     for num_filter, kernel_size in conv_kernels:

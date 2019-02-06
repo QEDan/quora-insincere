@@ -53,7 +53,7 @@ def write_predictions(data, preds, thresh=0.5):
     preds = (preds > thresh).astype(int)
     out_df = pd.DataFrame({"qid": data.test_df["qid"].values})
     out_df['prediction'] = preds
-    return out_df
+    out_df.to_csv("submission.csv", index=False)
 
 
 def print_diagnostics(y_true, y_pred, file_suffix='', persist=True):
@@ -185,17 +185,18 @@ def save_configs():
 
 
 def main():
-    word_threshold = 8
-    char_threshold = 15
+    word_threshold = 5
+    char_threshold = 350
     fix_unknowns = False
+    train_full = False
 
-    embedding_files = config.get('embedding_files')
-    dev_size = config.get('dev_size')
-    # dev_size = 50000
+    embedding_files = ['../input/embeddings/paragram_300_sl999/paragram_300_sl999.txt',
+                       '../input/embeddings/glove.840B.300d/glove.840B.300d.txt']
+    dev_size = None
     data = Data()
     data.load(dev_size)
     data.perform_preprocessing()
-    data.split()
+    data.split(train_full)
 
     nlp = spacy.load('en', disable=['parser', 'tagger', 'ner'])
 
@@ -225,7 +226,7 @@ def main():
 
         text_mappers = []
 
-        unknown_char_mapper = CharMapper(char_counts=char_counts, threshold=10, char_lowercase=True)
+        # unknown_char_mapper = CharMapper(char_counts=char_counts, threshold=10, char_lowercase=True)
         for ind, embedding in enumerate(embeddings):
             text_mapper = TextMapper(word_counts=word_counts, char_counts=char_counts,
                                      word_threshold=word_threshold,
@@ -234,13 +235,13 @@ def main():
             text_mapper.word_mapper.set_vocab(embedding.word_map_list)
             text_mappers.append(text_mapper)
 
-            if fix_unknowns:
-                unknown_char_len = 20
-                unknown_word_model = UnknownWords(char_mapper=unknown_char_mapper, max_word_len=unknown_char_len,
-                                                  embedding=embedding, text_mapper=text_mapper)
-                unknown_word_model.define_model()
-                unknown_word_model.fit()
-                unknown_word_model.improve_embedding()
+            # if fix_unknowns:
+            #     unknown_char_len = 20
+            #     unknown_word_model = UnknownWords(char_mapper=unknown_char_mapper, max_word_len=unknown_char_len,
+            #                                       embedding=embedding, text_mapper=text_mapper)
+            #     unknown_word_model.define_model()
+            #     unknown_word_model.fit()
+            #     unknown_word_model.improve_embedding()
 
         # pickle.dump(embeddings, open(unk_emb_path, 'wb'))
         # pickle.dump(text_mappers, open(text_mapper_path, 'wb'))
@@ -251,7 +252,8 @@ def main():
     # embedding = embeddings[0]
         print("{} unknown words out of {}".format(len(embedding.unknown_words), len(embedding.word_map_list)))
     # text_mapper = text_mappers[0]
-        model = BiLSTMCharCNNModel(data=data, corpus_info=corpus_info, text_mapper=text_mapper, batch_size=128)
+        model = BiLSTMCharCNNModel(data=data, corpus_info=corpus_info, text_mapper=text_mapper, batch_size=128,
+                                   train_full=train_full)
         model.set_embedding(embedding)
         model.define_model()
         model.fit()
@@ -259,18 +261,21 @@ def main():
         test_preds = model.predict_subset('test')
         submit_preds.append(test_preds)
 
-        val_preds = model.predict_subset(subset='val')
-        preds.append(val_preds)
+        if not train_full:
+            val_preds = model.predict_subset(subset='val')
+            preds.append(val_preds)
 
-    val_preds_np = np.array(preds)
-    val_preds_y = val_preds_np.mean(axis=0)
+    # don't find threshold if training full
+    if not train_full:
+        val_preds_np = np.array(preds)
+        val_preds_y = val_preds_np.mean(axis=0)
 
-    val_y = np.array(data.val_labels)
-    thresh = find_best_threshold(val_preds_y, val_y)
+        val_y = np.array(data.val_labels)
+        thresh = find_best_threshold(val_preds_y, val_y)
+        print_diagnostics(val_y, (val_preds_y > thresh).astype(int))
 
-    # pred_val_y = ensemble_cv.predict_linear_regression(train_X, data.train_y, val_X)
-    print_diagnostics(val_y, (val_preds_y > thresh).astype(int))
-    # pred_y_test = ensemble_cv.predict_linear_regression(train_X, data.train_y, test_X)
+    else:
+        thresh = 0.33547
 
     submit_preds_np = np.array(submit_preds)
     submit_preds_y = submit_preds_np.mean(axis=0)

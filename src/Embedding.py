@@ -68,7 +68,7 @@ class Embedding:
         # count padding and unknown as part of vocab so start from 2
         self.word_map_list.append('<PAD>')
         self.word_map_list.append('<UNK>')
-        for word, count in self.word_counts[2:]:
+        for word, count in self.word_counts:
             if self.embeddings_index.get(word) is not None or count >= self.word_threshold:
                 self.word_map_list.append(word)
 

@@ -13,7 +13,9 @@ from src.data_generator import DataGenerator
 
 
 class InsincereModel:
-    def __init__(self, data, corpus_info, text_mapper, batch_size=16, name=None, loss='binary_crossentropy'):
+    def __init__(self, data, corpus_info, text_mapper, batch_size=16, name=None, loss='binary_crossentropy',
+                 train_full=False):
+        self.train_full = train_full
         self.data = data
         self.corpus_info = corpus_info
         self.text_mapper = text_mapper
@@ -115,15 +117,18 @@ class InsincereModel:
 
         train_generator = DataGenerator(text=self.data.train_qs, labels=self.data.train_labels,
                                         text_mapper=self.text_mapper, batch_size=self.batch_size)
-        val_generator = DataGenerator(text=self.data.val_qs, labels=self.data.val_labels,
-                                      text_mapper=self.text_mapper, batch_size=self.batch_size)
+        if not self.train_full:
+            val_generator = DataGenerator(text=self.data.val_qs, labels=self.data.val_labels,
+                                          text_mapper=self.text_mapper, batch_size=self.batch_size)
+        else:
+            val_generator = None
 
-        callbacks = self._get_callbacks(config.get('epochs'), config.get('batch_size'))
+        # callbacks = self._get_callbacks(config.get('epochs'), config.get('batch_size'))
 
         batch_size = [64, 128, 256]
-        loss_weights = [[1, 1], [1, 1], [1, 1]]
-        epsilon = [1e-7, 1e-6, 1e-5]
-        fraction_of_training = [1/4, 1/2, 3/4]
+        loss_weights = [[1, 1, 1], [1, 1, 1], [1, 1, 1]]
+        epsilon = [1e-6, 1e-5, 1e-4]
+        fraction_of_training = [1/3, 1/2, 2/3]
         lr = [0.001, 0.001, 0.0003]
         # todo: write this in a for loop and change batch size, learning rate, and epsilon (K.set_epsilon(1e-2))
         # todo: optimize learning rates
@@ -138,7 +143,7 @@ class InsincereModel:
             self.model.compile(loss=self.loss, loss_weights=loss_weights[i],
                                optimizer=Adam(lr=lr[i]), metrics=[self.f1_score])
             self.model.fit_generator(generator=train_generator, steps_per_epoch=steps_per_epoch,
-                                     verbose=2, callbacks=callbacks,
+                                     verbose=2,
                                      validation_data=val_generator,
                                      max_queue_size=10,
                                      workers=1,
