@@ -40,7 +40,7 @@ class BiLSTMCharCNNModel(InsincereModel):
 
         # todo: maybe bidirectional lstm is just too slow, can try a deeper convolutional network
         x = Bidirectional(CuDNNLSTM(64, return_sequences=True))(word_rep)
-        x = Bidirectional(CuDNNLSTM(64))(x)
+        x = Bidirectional(CuDNNLSTM(32))(x)
         # x = Conv1D(filters=100, kernel_size=2)(x)
         # max_x = GlobalMaxPooling1D()(x)
         # avg_x = GlobalAveragePooling1D()(x)
@@ -92,7 +92,7 @@ class CharCNNWordModel(InsincereModel):
 
 def char_level_feature_model(char_input, char_feat_input, max_word_len, char_vocab_size):
     chars_words_embedding = TimeDistributed(EmbeddingLayer(char_vocab_size,
-                                                           output_dim=16,
+                                                           output_dim=32,
                                                            input_length=max_word_len))(char_input)
     # todo: add additional char features here
     char_rep = Concatenate()([chars_words_embedding, char_feat_input])
@@ -106,9 +106,9 @@ def char_level_feature_model(char_input, char_feat_input, max_word_len, char_voc
         x = TimeDistributed(GlobalMaxPooling1D())(batch_norm)
         conv_outputs.append(x)
     char_convs_out = Concatenate()(conv_outputs)
-    x = Dense(100)(char_convs_out)
-    x = Dropout(0.3)(x)
-    x = Dense(50)(x)
+    x = Dense(50)(char_convs_out)
+    x = Dropout(0.1)(x)
+    x = Dense(25)(x)
     return x
 
 # dev_size = config.get('dev_size')

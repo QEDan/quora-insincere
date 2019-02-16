@@ -199,8 +199,8 @@ def main():
     word_counts = corpus_info.word_counts
     char_counts = corpus_info.char_counts
 
-    text_mapper = TextMapper(word_counts=word_counts, char_counts=char_counts, word_threshold=10, max_word_len=12,
-                             char_threshold=350, max_sent_len=50, nlp=nlp, word_lowercase=True, char_lowercase=True)
+    text_mapper = TextMapper(word_counts=word_counts, char_counts=char_counts, word_threshold=5, max_word_len=20,
+                             char_threshold=200, max_sent_len=50, nlp=nlp, word_lowercase=True, char_lowercase=True)
 
     word_vocab = text_mapper.get_words_vocab()
 
@@ -220,7 +220,7 @@ def main():
     #                                      embeddings,
     #                                      model_config=model.get('args')))
 
-    model = BiLSTMCharCNNModel(data=data, corpus_info=corpus_info, text_mapper=text_mapper, batch_size=128)
+    model = CharCNNWordModel(data=data, corpus_info=corpus_info, text_mapper=text_mapper, batch_size=1500)
     model.blend_embeddings(embeddings)
 
     model.define_model()

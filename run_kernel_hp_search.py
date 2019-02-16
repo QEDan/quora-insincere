@@ -100,7 +100,7 @@ def random_configs():
 
 
 if __name__ == "__main__":
-    search_size = 3
+    search_size = 1
     for i in range(search_size):
         random_state, config_data, config_insincere_model, \
             config_lrfinder, config_one_cycle, config_main \

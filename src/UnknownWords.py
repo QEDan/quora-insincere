@@ -6,7 +6,7 @@ from sklearn.model_selection import train_test_split
 
 
 class UnknownWords:
-    def __init__(self, text_mapper, embedding, max_words=500,
+    def __init__(self, text_mapper, embedding, max_words=5000,
                  loss='mean_squared_error'):
         self.text_mapper = text_mapper
         self.embedding = embedding
@@ -58,7 +58,7 @@ class UnknownWords:
     def fit(self, sentences):
         logging.info('Fitting UnknownWords model...')
         train_X, val_X, train_y, val_y = self.sample_training_data(sentences)
-        self.model.fit(x=train_X, y=train_y, epochs=10, batch_size=128)
+        self.model.fit(x=train_X, y=train_y, epochs=10, batch_size=256)
 
     def predict(self, words):
         input_x = np.array([self.texts_to_x(word) for word in words])
